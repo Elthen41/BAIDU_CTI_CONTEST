@@ -1,0 +1,789 @@
+[2350757] python3.10@127.0.0.1
+  void <unnamed>::smoe_route_pack_kernel<long, c10::Half>(const c10::Half *, const T1 *, const T2 *, int *, c10::Half *, int *, int *, int *, T2 *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.11
+    Elapsed Cycles                cycle       32,012
+    Memory Throughput                 %        21.05
+    DRAM Throughput                   %         9.03
+    Duration                         us        41.89
+    L1/TEX Cache Throughput           %        16.49
+    L2 Cache Throughput               %        36.90
+    SM Active Cycles              cycle    29,468.42
+    Compute (SM) Throughput           %        19.21
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       140.17
+    Mem Busy                                         %        16.98
+    Max Bandwidth                                    %        21.05
+    L1/TEX Hit Rate                                  %        16.51
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        71.97
+    Mem Pipes Busy                                   %        10.14
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (8, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.91
+    Elapsed Cycles                cycle      349,153
+    Memory Throughput                 %        51.34
+    DRAM Throughput                   %         2.98
+    Duration                         us       456.45
+    L1/TEX Cache Throughput           %        56.75
+    L2 Cache Throughput               %        20.20
+    SM Active Cycles              cycle   315,284.14
+    Compute (SM) Throughput           %        32.05
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        46.30
+    Mem Busy                                         %        51.34
+    Max Bandwidth                                    %        20.20
+    L1/TEX Hit Rate                                  %        67.21
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.90
+    Mem Pipes Busy                                   %        11.87
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (4, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.91
+    Elapsed Cycles                cycle      359,057
+    Memory Throughput                 %        49.03
+    DRAM Throughput                   %         3.75
+    Duration                         us       469.41
+    L1/TEX Cache Throughput           %        54.18
+    L2 Cache Throughput               %        15.83
+    SM Active Cycles              cycle   323,143.47
+    Compute (SM) Throughput           %        30.24
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        58.27
+    Mem Busy                                         %        49.03
+    Max Bandwidth                                    %        17.89
+    L1/TEX Hit Rate                                  %        74.97
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.43
+    Mem Pipes Busy                                   %        10.28
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_reduce_residual_kernel<c10::Half>(const c10::Half *, const int *, const T1 *, const c10::Half *, c10::Half *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.58
+    Elapsed Cycles                cycle       28,584
+    Memory Throughput                 %        30.45
+    DRAM Throughput                   %        30.45
+    Duration                         us        37.38
+    L1/TEX Cache Throughput           %        31.03
+    L2 Cache Throughput               %        46.56
+    SM Active Cycles              cycle    25,115.39
+    Compute (SM) Throughput           %        43.69
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       472.70
+    Mem Busy                                         %        27.80
+    Max Bandwidth                                    %        30.45
+    L1/TEX Hit Rate                                  %        39.80
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        28.80
+    Mem Pipes Busy                                   %        25.99
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_count_kernel<long>(const T1 *, int *, long) (43, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       760.58
+    Elapsed Cycles                cycle        9,663
+    Memory Throughput                 %         1.44
+    DRAM Throughput                   %         0.46
+    Duration                         us        12.70
+    L1/TEX Cache Throughput           %        12.13
+    L2 Cache Throughput               %         1.49
+    SM Active Cycles              cycle       655.25
+    Compute (SM) Throughput           %         0.45
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s         7.09
+    Mem Busy                                         %         1.44
+    Max Bandwidth                                    %         1.34
+    L1/TEX Hit Rate                                  %            0
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        71.55
+    Mem Pipes Busy                                   %         0.45
+    -------------------------------------- ----------- ------------
+
+  <unnamed>::smoe_route_prefix_kernel(const int *, int *, int *) (1, 1, 1)x(1, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.19
+    SM Frequency                    Mhz       752.17
+    Elapsed Cycles                cycle        3,420
+    Memory Throughput                 %         0.48
+    DRAM Throughput                   %         0.06
+    Duration                         us         4.54
+    L1/TEX Cache Throughput           %        46.55
+    L2 Cache Throughput               %         0.48
+    SM Active Cycles              cycle        12.89
+    Compute (SM) Throughput           %         0.01
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Mbyte/s       845.07
+    Mem Busy                                         %         0.48
+    Max Bandwidth                                    %         0.42
+    L1/TEX Hit Rate                                  %           88
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        93.66
+    Mem Pipes Busy                                   %         0.01
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_pack_kernel<long, c10::Half>(const c10::Half *, const T1 *, const T2 *, int *, c10::Half *, int *, int *, int *, T2 *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.18
+    Elapsed Cycles                cycle       31,965
+    Memory Throughput                 %        21.13
+    DRAM Throughput                   %         9.09
+    Duration                         us        41.82
+    L1/TEX Cache Throughput           %        17.01
+    L2 Cache Throughput               %        36.79
+    SM Active Cycles              cycle    28,397.88
+    Compute (SM) Throughput           %        19.56
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       140.98
+    Mem Busy                                         %        17.09
+    Max Bandwidth                                    %        21.13
+    L1/TEX Hit Rate                                  %        17.17
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        73.67
+    Mem Pipes Busy                                   %        10.32
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (8, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.94
+    Elapsed Cycles                cycle      345,956
+    Memory Throughput                 %        51.60
+    DRAM Throughput                   %         3.02
+    Duration                         us       452.26
+    L1/TEX Cache Throughput           %        56.39
+    L2 Cache Throughput               %        20.56
+    SM Active Cycles              cycle   317,525.44
+    Compute (SM) Throughput           %        32.21
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        46.94
+    Mem Busy                                         %        51.60
+    Max Bandwidth                                    %        20.56
+    L1/TEX Hit Rate                                  %        66.74
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        91.21
+    Mem Pipes Busy                                   %        11.94
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (4, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      357,927
+    Memory Throughput                 %        48.75
+    DRAM Throughput                   %         3.74
+    Duration                         us       467.94
+    L1/TEX Cache Throughput           %        54.41
+    L2 Cache Throughput               %        15.92
+    SM Active Cycles              cycle   321,903.46
+    Compute (SM) Throughput           %        30.07
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        58.16
+    Mem Busy                                         %        48.75
+    Max Bandwidth                                    %        17.79
+    L1/TEX Hit Rate                                  %        74.83
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.45
+    Mem Pipes Busy                                   %        10.23
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_reduce_residual_kernel<c10::Half>(const c10::Half *, const int *, const T1 *, const c10::Half *, c10::Half *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.31
+    Elapsed Cycles                cycle       28,598
+    Memory Throughput                 %        30.64
+    DRAM Throughput                   %        30.64
+    Duration                         us        37.41
+    L1/TEX Cache Throughput           %        31.03
+    L2 Cache Throughput               %        46.06
+    SM Active Cycles              cycle    25,133.43
+    Compute (SM) Throughput           %        43.57
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       475.24
+    Mem Busy                                         %        27.75
+    Max Bandwidth                                    %        30.64
+    L1/TEX Hit Rate                                  %        39.79
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        28.74
+    Mem Pipes Busy                                   %        25.92
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_count_kernel<long>(const T1 *, int *, long) (43, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       761.09
+    Elapsed Cycles                cycle        9,426
+    Memory Throughput                 %         1.69
+    DRAM Throughput                   %         0.47
+    Duration                         us        12.38
+    L1/TEX Cache Throughput           %        12.56
+    L2 Cache Throughput               %         1.91
+    SM Active Cycles              cycle       660.68
+    Compute (SM) Throughput           %         0.47
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s         7.28
+    Mem Busy                                         %         1.69
+    Max Bandwidth                                    %         1.37
+    L1/TEX Hit Rate                                  %            0
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        72.64
+    Mem Pipes Busy                                   %         0.47
+    -------------------------------------- ----------- ------------
+
+  <unnamed>::smoe_route_prefix_kernel(const int *, int *, int *) (1, 1, 1)x(1, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.19
+    SM Frequency                    Mhz       752.87
+    Elapsed Cycles                cycle        3,567
+    Memory Throughput                 %         0.46
+    DRAM Throughput                   %         0.05
+    Duration                         us         4.74
+    L1/TEX Cache Throughput           %        42.08
+    L2 Cache Throughput               %         0.46
+    SM Active Cycles              cycle        14.26
+    Compute (SM) Throughput           %         0.01
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Mbyte/s       810.81
+    Mem Busy                                         %         0.46
+    Max Bandwidth                                    %         0.45
+    L1/TEX Hit Rate                                  %           88
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        92.84
+    Mem Pipes Busy                                   %         0.01
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_pack_kernel<long, c10::Half>(const c10::Half *, const T1 *, const T2 *, int *, c10::Half *, int *, int *, int *, T2 *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       763.60
+    Elapsed Cycles                cycle       31,990
+    Memory Throughput                 %        21.05
+    DRAM Throughput                   %         9.12
+    Duration                         us        41.89
+    L1/TEX Cache Throughput           %        16.78
+    L2 Cache Throughput               %        37.24
+    SM Active Cycles              cycle    28,994.50
+    Compute (SM) Throughput           %        19.05
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       141.65
+    Mem Busy                                         %        17.08
+    Max Bandwidth                                    %        21.05
+    L1/TEX Hit Rate                                  %        16.27
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        72.67
+    Mem Pipes Busy                                   %        10.05
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (8, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.92
+    Elapsed Cycles                cycle      347,783
+    Memory Throughput                 %        51.22
+    DRAM Throughput                   %         3.01
+    Duration                         us       454.66
+    L1/TEX Cache Throughput           %        56.42
+    L2 Cache Throughput               %        20.38
+    SM Active Cycles              cycle   314,271.80
+    Compute (SM) Throughput           %        31.90
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        46.79
+    Mem Busy                                         %        51.22
+    Max Bandwidth                                    %        20.38
+    L1/TEX Hit Rate                                  %        66.71
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        91.17
+    Mem Pipes Busy                                   %        11.81
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (4, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.88
+    Elapsed Cycles                cycle      358,581
+    Memory Throughput                 %        48.51
+    DRAM Throughput                   %         3.75
+    Duration                         us       468.80
+    L1/TEX Cache Throughput           %        54.00
+    L2 Cache Throughput               %        15.79
+    SM Active Cycles              cycle   321,224.93
+    Compute (SM) Throughput           %        29.86
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        58.26
+    Mem Busy                                         %        48.51
+    Max Bandwidth                                    %        17.67
+    L1/TEX Hit Rate                                  %        74.78
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.38
+    Mem Pipes Busy                                   %        10.15
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_reduce_residual_kernel<c10::Half>(const c10::Half *, const int *, const T1 *, const c10::Half *, c10::Half *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.29
+    Elapsed Cycles                cycle       28,572
+    Memory Throughput                 %        30.78
+    DRAM Throughput                   %        30.78
+    Duration                         us        37.38
+    L1/TEX Cache Throughput           %        30.89
+    L2 Cache Throughput               %        46.76
+    SM Active Cycles              cycle    25,209.98
+    Compute (SM) Throughput           %        43.32
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       477.70
+    Mem Busy                                         %        27.55
+    Max Bandwidth                                    %        30.78
+    L1/TEX Hit Rate                                  %        39.81
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        29.10
+    Mem Pipes Busy                                   %        25.78
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_count_kernel<long>(const T1 *, int *, long) (43, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       760.73
+    Elapsed Cycles                cycle       10,200
+    Memory Throughput                 %         1.71
+    DRAM Throughput                   %         0.43
+    Duration                         us        13.41
+    L1/TEX Cache Throughput           %        13.39
+    L2 Cache Throughput               %         1.84
+    SM Active Cycles              cycle       667.17
+    Compute (SM) Throughput           %         0.48
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s         6.72
+    Mem Busy                                         %         1.71
+    Max Bandwidth                                    %         1.40
+    L1/TEX Hit Rate                                  %            0
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        74.36
+    Mem Pipes Busy                                   %         0.48
+    -------------------------------------- ----------- ------------
+
+  <unnamed>::smoe_route_prefix_kernel(const int *, int *, int *) (1, 1, 1)x(1, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.20
+    SM Frequency                    Mhz       756.15
+    Elapsed Cycles                cycle        3,533
+    Memory Throughput                 %         0.47
+    DRAM Throughput                   %         0.05
+    Duration                         us         4.67
+    L1/TEX Cache Throughput           %        42.05
+    L2 Cache Throughput               %         0.47
+    SM Active Cycles              cycle        14.27
+    Compute (SM) Throughput           %         0.01
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.0 full      
+          waves across all SMs. Look at Launch Statistics for more details.                                             
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Mbyte/s       794.52
+    Mem Busy                                         %         0.47
+    Max Bandwidth                                    %         0.45
+    L1/TEX Hit Rate                                  %           88
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        94.66
+    Mem Pipes Busy                                   %         0.01
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_route_pack_kernel<long, c10::Half>(const c10::Half *, const T1 *, const T2 *, int *, c10::Half *, int *, int *, int *, T2 *, long) (10928, 1, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.36
+    Elapsed Cycles                cycle       32,094
+    Memory Throughput                 %        21.03
+    DRAM Throughput                   %         8.97
+    Duration                         us        41.98
+    L1/TEX Cache Throughput           %        17.21
+    L2 Cache Throughput               %        36.31
+    SM Active Cycles              cycle    28,254.85
+    Compute (SM) Throughput           %        19.59
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       139.18
+    Mem Busy                                         %        16.94
+    Max Bandwidth                                    %        21.03
+    L1/TEX Hit Rate                                  %        16.74
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        72.65
+    Mem Pipes Busy                                   %        10.34
+    -------------------------------------- ----------- ------------
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const c10::Half *, const short *, const T4 *, const T4 *, const c10::Half *, const int *, const int *, c10::Half *, int) (8, 94, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.94
+    Elapsed Cycles                cycle      348,007
+    Memory Throughput                 %        51.60
+    DRAM Throughput                   %         3.01
+    Duration                         us       454.94
+    L1/TEX Cache Throughput           %        56.13
+    L2 Cache Throughput               %        20.38
+    SM Active Cycles              cycle   318,705.06
+    Compute (SM) Throughput           %        32.21
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        46.88
+    Mem Busy                                         %        51.60
+    Max Bandwidth                                    %        20.38
+    L1/TEX Hit Rate                                  %        66.83
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        91.18
+    Mem Pipes Busy                                   %        11.91
+    -------------------------------------- ----------- ------------
+

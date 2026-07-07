@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.so
+*.egg-info/
+build/
+.DS_Store
+.idea/
+checkpoints/
+*.out
+log/

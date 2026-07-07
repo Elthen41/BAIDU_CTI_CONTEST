@@ -1,0 +1,42 @@
+# Inference + evaluation dependencies for the W4A4 (APEX4) release.
+# Requires Python 3.11. Tested: PyTorch 2.5.1 (cu124 build) + CUDA 12.4 toolkit.
+#
+# NOTE: install PyTorch FIRST with the matching CUDA build, because
+# fast_hadamard_transform (and the CUDA kernels) compile against it:
+#     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+#     pip install -r requirements.txt
+# Building the kernels and fast_hadamard_transform also needs a CUDA 12.x toolkit
+# (nvcc) and a C++ compiler — these are system packages, not pip-installable.
+
+torch==2.5.1
+transformers==4.51.3
+tokenizers==0.21.4
+accelerate==1.10.0
+safetensors==0.5.3
+huggingface_hub==0.36.2
+datasets==2.16.1
+numpy==2.3.1
+tqdm==4.67.1
+colorama==0.4.6
+sentencepiece==0.2.1
+
+# Optional: faster activation quant/pack on the W4A4 decode path (ships with torch 2.5).
+# QuantLinearTorch falls back to pure-PyTorch if triton is absent.
+triton==3.1.0
+
+# --- Dependencies of the vendored lm-eval-harness (lm_eval/), for --tasks ---
+# PPL-only evaluation does not need these.
+sqlitedict==2.1.0
+pytablewriter==1.2.1
+jsonlines==4.0.0
+sacrebleu==2.5.1
+rouge_score==0.1.2
+pycountry==24.6.1
+scikit-learn==1.7.1
+scipy==1.16.1
+pandas==2.3.1
+omegaconf==2.3.0
+zstandard==0.23.0
+numexpr==2.11.0
+nltk==3.9.1
+tqdm-multiprocess==0.0.11

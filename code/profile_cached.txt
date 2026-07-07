@@ -1,0 +1,23 @@
+aistudio@jupyter-19900337-10482959:~$ /opt/conda/envs/python35-paddle120-env/bin/python code/profile_cached_batches.py 
+/home/aistudio/libraries/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[INFO] cache_dir=/home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches
+[INFO] loaded 217 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0000.pt
+[INFO] loaded 218 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0001.pt
+[INFO] loaded 215 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0002.pt
+[INFO] loaded 226 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0003.pt
+[INFO] loaded 240 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0004.pt
+[INFO] loaded 260 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0005.pt
+[INFO] loaded 284 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0006.pt
+[INFO] loaded 335 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0007.pt
+[INFO] loaded 44 batches from /home/aistudio/data/datasets/375013/2026_cti_data/dataset/cached_batches/shard_0008.pt
+[INFO] scanned_batches=2039
+batch_seq_len: count=2039, min=1221, p50=4425.00, p90=5948.80, p95=6395.90, p99=7294.44, max=10793, mean=4531.73
+batch_user_count: count=2039, min=10, p50=20.00, p90=20.00, p95=20.00, p99=20.00, max=20, mean=20.00
+user_seq_len: count=40770, min=100, p50=173.00, p90=401.00, p95=523.00, p99=857.00, max=3350, mean=226.64
+dense_attention_scores=sum(S^2): 44099391360
+varlen_full_scores=sum(L^2): 3159029638
+varlen_causal_scores=sum(L*(L+1)/2): 1584134920
+varlen_full / dense: 0.071634
+varlen_causal / dense: 0.035922
+dense / varlen_causal: 27.84x

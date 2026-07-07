@@ -1,0 +1,2061 @@
+[2356918] python3.10@127.0.0.1
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.92
+    Elapsed Cycles                cycle      287,788
+    Memory Throughput                 %        53.03
+    DRAM Throughput                   %         2.69
+    Duration                         us       376.22
+    L1/TEX Cache Throughput           %        56.05
+    L2 Cache Throughput               %        20.27
+    SM Active Cycles              cycle   271,164.33
+    Compute (SM) Throughput           %        33.26
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        41.78
+    Mem Busy                                         %        53.03
+    Max Bandwidth                                    %        20.27
+    L1/TEX Hit Rate                                  %        67.95
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.55
+    Mem Pipes Busy                                   %        12.30
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.53
+    Warp Cycles Per Executed Instruction           cycle        10.54
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.89
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    640
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         163,840
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.96
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 208 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        23.14
+    Achieved Active Warps Per SM           warp        14.81
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.85
+    Elapsed Cycles                cycle      350,596
+    Memory Throughput                 %        42.54
+    DRAM Throughput                   %         3.29
+    Duration                         us       458.37
+    L1/TEX Cache Throughput           %        53.09
+    L2 Cache Throughput               %        14.04
+    SM Active Cycles              cycle   280,349.94
+    Compute (SM) Throughput           %        26.35
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        51.12
+    Mem Busy                                         %        42.54
+    Max Bandwidth                                    %        16.47
+    L1/TEX Hit Rate                                  %        73.94
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        81.99
+    Mem Pipes Busy                                   %         8.95
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         9.95
+    Warp Cycles Per Executed Instruction           cycle         9.95
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    320
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          81,920
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.48
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 104 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.45
+    Achieved Active Warps Per SM           warp        13.09
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.97
+    Elapsed Cycles                cycle      285,604
+    Memory Throughput                 %        52.34
+    DRAM Throughput                   %         3.57
+    Duration                         us       373.34
+    L1/TEX Cache Throughput           %        55.83
+    L2 Cache Throughput               %        20.43
+    SM Active Cycles              cycle   266,609.26
+    Compute (SM) Throughput           %        32.67
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        55.59
+    Mem Busy                                         %        52.34
+    Max Bandwidth                                    %        20.43
+    L1/TEX Hit Rate                                  %        67.72
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.61
+    Mem Pipes Busy                                   %        12.10
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.48
+    Warp Cycles Per Executed Instruction           cycle        10.49
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.92
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    640
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         163,840
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.96
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 208 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.83
+    Achieved Active Warps Per SM           warp        14.61
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.91
+    Elapsed Cycles                cycle      347,243
+    Memory Throughput                 %        42.12
+    DRAM Throughput                   %         3.32
+    Duration                         us       453.95
+    L1/TEX Cache Throughput           %        54.69
+    L2 Cache Throughput               %        14.13
+    SM Active Cycles              cycle   266,390.06
+    Compute (SM) Throughput           %        25.97
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        51.60
+    Mem Busy                                         %        42.12
+    Max Bandwidth                                    %        16.15
+    L1/TEX Hit Rate                                  %        73.68
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        81.81
+    Mem Pipes Busy                                   %         8.83
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.11
+    Warp Cycles Per Executed Instruction           cycle        10.11
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.91
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    320
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          81,920
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.48
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 104 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.31
+    Achieved Active Warps Per SM           warp        13.64
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.94
+    Elapsed Cycles                cycle      285,546
+    Memory Throughput                 %        52.61
+    DRAM Throughput                   %         2.71
+    Duration                         us       373.28
+    L1/TEX Cache Throughput           %        56.02
+    L2 Cache Throughput               %        20.33
+    SM Active Cycles              cycle   268,587.87
+    Compute (SM) Throughput           %        32.92
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        42.10
+    Mem Busy                                         %        52.61
+    Max Bandwidth                                    %        20.33
+    L1/TEX Hit Rate                                  %        67.87
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.62
+    Mem Pipes Busy                                   %        12.19
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.50
+    Warp Cycles Per Executed Instruction           cycle        10.50
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.90
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    640
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         163,840
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.96
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 208 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.99
+    Achieved Active Warps Per SM           warp        14.71
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      334,989
+    Memory Throughput                 %        42.76
+    DRAM Throughput                   %         3.44
+    Duration                         us       437.95
+    L1/TEX Cache Throughput           %        53.45
+    L2 Cache Throughput               %        14.70
+    SM Active Cycles              cycle   275,507.26
+    Compute (SM) Throughput           %        26.43
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        53.42
+    Mem Busy                                         %        42.76
+    Max Bandwidth                                    %        16.58
+    L1/TEX Hit Rate                                  %        73.56
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.21
+    Mem Pipes Busy                                   %         8.98
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.05
+    Warp Cycles Per Executed Instruction           cycle        10.05
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.89
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    320
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          81,920
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.48
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 104 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.74
+    Achieved Active Warps Per SM           warp        13.27
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.95
+    Elapsed Cycles                cycle      285,964
+    Memory Throughput                 %        53.23
+    DRAM Throughput                   %         2.61
+    Duration                         us       373.82
+    L1/TEX Cache Throughput           %        56.55
+    L2 Cache Throughput               %        20.42
+    SM Active Cycles              cycle   268,963.88
+    Compute (SM) Throughput           %        33.39
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        40.63
+    Mem Busy                                         %        53.23
+    Max Bandwidth                                    %        20.42
+    L1/TEX Hit Rate                                  %        67.92
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.68
+    Mem Pipes Busy                                   %        12.37
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.47
+    Warp Cycles Per Executed Instruction           cycle        10.48
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.89
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    640
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         163,840
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.96
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 208 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        23.18
+    Achieved Active Warps Per SM           warp        14.84
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 80, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.86
+    Elapsed Cycles                cycle      352,019
+    Memory Throughput                 %        42.60
+    DRAM Throughput                   %         3.27
+    Duration                         us       460.22
+    L1/TEX Cache Throughput           %        54.29
+    L2 Cache Throughput               %        14.01
+    SM Active Cycles              cycle   274,321.09
+    Compute (SM) Throughput           %        26.38
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        50.89
+    Mem Busy                                         %        42.60
+    Max Bandwidth                                    %        16.34
+    L1/TEX Hit Rate                                  %        73.93
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.34
+    Mem Pipes Busy                                   %         8.97
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.07
+    Warp Cycles Per Executed Instruction           cycle        10.08
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.87
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    320
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          81,920
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.48
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 104 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.15
+    Achieved Active Warps Per SM           warp        13.54
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.87
+    Elapsed Cycles                cycle      277,680
+    Memory Throughput                 %        49.55
+    DRAM Throughput                   %         2.45
+    Duration                         us       363.04
+    L1/TEX Cache Throughput           %        53.81
+    L2 Cache Throughput               %        18.99
+    SM Active Cycles              cycle   253,701.53
+    Compute (SM) Throughput           %        30.97
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        38.17
+    Mem Busy                                         %        49.55
+    Max Bandwidth                                    %        18.99
+    L1/TEX Hit Rate                                  %        68.05
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.55
+    Mem Pipes Busy                                   %        11.46
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.40
+    Warp Cycles Per Executed Instruction           cycle        10.41
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.91
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.87
+    Achieved Active Warps Per SM           warp        14.00
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.90
+    Elapsed Cycles                cycle      313,429
+    Memory Throughput                 %        42.78
+    DRAM Throughput                   %         3.41
+    Duration                         us       409.76
+    L1/TEX Cache Throughput           %        54.89
+    L2 Cache Throughput               %        14.67
+    SM Active Cycles              cycle   243,653.36
+    Compute (SM) Throughput           %        26.39
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        53.03
+    Mem Busy                                         %        42.78
+    Max Bandwidth                                    %        18.11
+    L1/TEX Hit Rate                                  %        72.84
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.21
+    Mem Pipes Busy                                   %         8.97
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.15
+    Warp Cycles Per Executed Instruction           cycle        10.15
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.90
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.48
+    Achieved Active Warps Per SM           warp        13.75
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.90
+    Elapsed Cycles                cycle      276,327
+    Memory Throughput                 %        50.77
+    DRAM Throughput                   %         2.44
+    Duration                         us       361.25
+    L1/TEX Cache Throughput           %        54.35
+    L2 Cache Throughput               %        19.11
+    SM Active Cycles              cycle   257,135.62
+    Compute (SM) Throughput           %        31.91
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        38.00
+    Mem Busy                                         %        50.77
+    Max Bandwidth                                    %        20.10
+    L1/TEX Hit Rate                                  %        68.63
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.29
+    Mem Pipes Busy                                   %        11.81
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.40
+    Warp Cycles Per Executed Instruction           cycle        10.40
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.20
+    Achieved Active Warps Per SM           warp        14.21
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.91
+    Elapsed Cycles                cycle      329,834
+    Memory Throughput                 %        43.76
+    DRAM Throughput                   %         3.25
+    Duration                         us       431.20
+    L1/TEX Cache Throughput           %        54.66
+    L2 Cache Throughput               %        13.96
+    SM Active Cycles              cycle   250,668.94
+    Compute (SM) Throughput           %        27.13
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        50.56
+    Mem Busy                                         %        43.76
+    Max Bandwidth                                    %        17.08
+    L1/TEX Hit Rate                                  %        73.27
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        81.85
+    Mem Pipes Busy                                   %         9.22
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.05
+    Warp Cycles Per Executed Instruction           cycle        10.06
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.87
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.32
+    Achieved Active Warps Per SM           warp        13.64
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.87
+    Elapsed Cycles                cycle      273,113
+    Memory Throughput                 %        50.63
+    DRAM Throughput                   %         2.54
+    Duration                         us       357.06
+    L1/TEX Cache Throughput           %        54.14
+    L2 Cache Throughput               %        19.34
+    SM Active Cycles              cycle   255,271.21
+    Compute (SM) Throughput           %        31.75
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        39.47
+    Mem Busy                                         %        50.63
+    Max Bandwidth                                    %        21.57
+    L1/TEX Hit Rate                                  %        68.29
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.19
+    Mem Pipes Busy                                   %        11.77
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.34
+    Warp Cycles Per Executed Instruction           cycle        10.35
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.89
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.99
+    Achieved Active Warps Per SM           warp        14.07
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.88
+    Elapsed Cycles                cycle      334,500
+    Memory Throughput                 %        40.46
+    DRAM Throughput                   %         3.20
+    Duration                         us       437.31
+    L1/TEX Cache Throughput           %        54.89
+    L2 Cache Throughput               %        13.76
+    SM Active Cycles              cycle   246,661.87
+    Compute (SM) Throughput           %        25.03
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        49.82
+    Mem Busy                                         %        40.46
+    Max Bandwidth                                    %        16.47
+    L1/TEX Hit Rate                                  %        72.96
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.38
+    Mem Pipes Busy                                   %         8.51
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.13
+    Warp Cycles Per Executed Instruction           cycle        10.14
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.52
+    Achieved Active Warps Per SM           warp        13.78
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      280,161
+    Memory Throughput                 %        50.07
+    DRAM Throughput                   %         2.45
+    Duration                         us       366.27
+    L1/TEX Cache Throughput           %        54.17
+    L2 Cache Throughput               %        18.87
+    SM Active Cycles              cycle   257,946.04
+    Compute (SM) Throughput           %        31.48
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        38.05
+    Mem Busy                                         %        50.07
+    Max Bandwidth                                    %        21.30
+    L1/TEX Hit Rate                                  %        68.64
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.45
+    Mem Pipes Busy                                   %        11.65
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.40
+    Warp Cycles Per Executed Instruction           cycle        10.41
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.17
+    Achieved Active Warps Per SM           warp        14.19
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.88
+    Elapsed Cycles                cycle      329,727
+    Memory Throughput                 %        41.23
+    DRAM Throughput                   %         3.25
+    Duration                         us       431.07
+    L1/TEX Cache Throughput           %        54.81
+    L2 Cache Throughput               %        14.00
+    SM Active Cycles              cycle   249,944.19
+    Compute (SM) Throughput           %        25.56
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        50.56
+    Mem Busy                                         %        41.23
+    Max Bandwidth                                    %        16.76
+    L1/TEX Hit Rate                                  %        73.16
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.07
+    Mem Pipes Busy                                   %         8.69
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.07
+    Warp Cycles Per Executed Instruction           cycle        10.08
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.87
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.41
+    Achieved Active Warps Per SM           warp        13.70
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      276,200
+    Memory Throughput                 %        49.86
+    DRAM Throughput                   %         2.61
+    Duration                         us       361.09
+    L1/TEX Cache Throughput           %        53.87
+    L2 Cache Throughput               %        19.08
+    SM Active Cycles              cycle   256,382.62
+    Compute (SM) Throughput           %        31.25
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        40.61
+    Mem Busy                                         %        49.86
+    Max Bandwidth                                    %        21.20
+    L1/TEX Hit Rate                                  %        68.38
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.28
+    Mem Pipes Busy                                   %        11.56
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.40
+    Warp Cycles Per Executed Instruction           cycle        10.41
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.90
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.94
+    Achieved Active Warps Per SM           warp        14.04
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.92
+    Elapsed Cycles                cycle      313,756
+    Memory Throughput                 %        43.30
+    DRAM Throughput                   %         3.40
+    Duration                         us       410.18
+    L1/TEX Cache Throughput           %        54.88
+    L2 Cache Throughput               %        14.65
+    SM Active Cycles              cycle   246,686.43
+    Compute (SM) Throughput           %        26.78
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        52.94
+    Mem Busy                                         %        43.30
+    Max Bandwidth                                    %        17.62
+    L1/TEX Hit Rate                                  %        72.92
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.20
+    Mem Pipes Busy                                   %         9.10
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.11
+    Warp Cycles Per Executed Instruction           cycle        10.11
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.42
+    Achieved Active Warps Per SM           warp        13.71
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<512, 1024, 1, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (8, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.95
+    Elapsed Cycles                cycle      276,076
+    Memory Throughput                 %        50.03
+    DRAM Throughput                   %         2.57
+    Duration                         us       360.90
+    L1/TEX Cache Throughput           %        54.13
+    L2 Cache Throughput               %        19.12
+    SM Active Cycles              cycle   255,285.52
+    Compute (SM) Throughput           %        31.37
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        39.96
+    Mem Busy                                         %        50.03
+    Max Bandwidth                                    %        21.31
+    L1/TEX Hit Rate                                  %        68.53
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.27
+    Mem Pipes Busy                                   %        11.62
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.36
+    Warp Cycles Per Executed Instruction           cycle        10.37
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.89
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    584
+    Registers Per Thread             register/thread             114
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         149,504
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                2.70
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 33.33%                                                                                          
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 2 full waves and a partial wave of 152 thread blocks.  
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 33.3% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.99
+    Achieved Active Warps Per SM           warp        14.08
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_w4a16_mma_tn_kernel<1024, 512, 0, float>(const Half *, const short *, const T4 *, const T4 *, const Half *, const int *, const int *, Half *, int) (4, 73, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      344,396
+    Memory Throughput                 %        39.54
+    DRAM Throughput                   %         3.10
+    Duration                         us       450.24
+    L1/TEX Cache Throughput           %        55.08
+    L2 Cache Throughput               %        13.32
+    SM Active Cycles              cycle   245,829.94
+    Compute (SM) Throughput           %        24.45
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        48.27
+    Mem Busy                                         %        39.54
+    Max Bandwidth                                    %        16.08
+    L1/TEX Hit Rate                                  %        73.20
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        82.12
+    Mem Pipes Busy                                   %         8.31
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        10.12
+    Warp Cycles Per Executed Instruction           cycle        10.13
+    Avg. Active Threads Per Warp                                32.00
+    Avg. Not Predicated Off Threads Per Warp                    29.88
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   256
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                    292
+    Registers Per Thread             register/thread             110
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread          74,752
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                1.35
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 50%                                                                                             
+          A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 76 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for  
+          up to 50.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall       
+          impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware   
+          Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for     
+          more details on launch configurations.                                                                        
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            7
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.54
+    Achieved Active Warps Per SM           warp        13.79
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+

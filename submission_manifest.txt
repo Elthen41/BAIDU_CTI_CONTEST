@@ -1,0 +1,19 @@
+# Files needed by the current best inference path.
+#
+# Use this as the source list when building the final submission zip instead of
+# packaging the whole CUDA directory. Experimental/negative-optimization CUDA
+# files are intentionally not listed here.
+
+requirements.txt
+build_env.sh
+infer.py
+
+CUDA/norm_kernels.cu
+CUDA/attention_kernels.cu
+CUDA/embedding_bag_kernels.cu
+CUDA/softmax_topk_kernels.cu
+CUDA/smoe_kernels.cu
+CUDA/output_kernels.cu
+
+# External runtime dependency copied from previous submission zips when needed:
+# libraries/

@@ -1,0 +1,43 @@
+W4A4 Quantization — Inference & Evaluation Release
+====================================================
+
+This package is released under the Apache License, Version 2.0 (see LICENSE).
+It builds on several Apache-2.0 open-source projects. Per Apache-2.0 §4, we
+retain the upstream attributions below and state the changes we made.
+
+--------------------------------------------------------------------------
+Provenance by component
+--------------------------------------------------------------------------
+
+1. CUDA kernels  (kernels/csrc/)
+   Derived from QQQ (https://arxiv.org/abs/2406.09904), which is itself
+   derived from the Marlin kernel by Elias Frantar (IST-DASLab).
+   Attribution chain:  Marlin (Frantar et al.)  ->  QQQ (HandH1998 et al.)  ->  this work.
+   The original Marlin/QQQ copyright headers are kept in the source files.
+   OUR CHANGES: new W4A4 GEMM kernels (4-bit weights, 4-bit activations) and the
+   fused activation quantization/compression path. See "Our contributions" below.
+
+2. Inference layer  (quantize/quant_linear.py)
+   The QuantLinearTorch layer that invokes our W4A4 kernel.
+   OUR CHANGES: W4A4 forward path (forward_w4a4) and weight packing for our kernel.
+
+3. Quantization / calibration method  (NOT included in this repository)
+   The quantized checkpoints evaluated here are produced by the OmniQuant method
+   (Shao et al., ICLR 2024, https://arxiv.org/abs/2308.13137). The quantization code
+   is not part of this package; see README.md for the quantization configuration.
+
+4. Evaluation harness  (lm_eval/)
+   A vendored copy of EleutherAI's lm-evaluation-harness (MIT/Apache-2.0).
+
+--------------------------------------------------------------------------
+Our contributions (what the authors wrote / modified)
+--------------------------------------------------------------------------
+  - W4A4 CUDA GEMM kernels:
+      kernels/csrc/apex4_gemm_w4a4_group.cu     (per-group W4A4)
+      kernels/csrc/apex4_gemm_w4a4_channel.cu   (per-channel W4A4)
+      kernels/csrc/quantize_kernel.cu   (fused activation quant + 4-bit pack)
+  - W4A4 inference layer + weight packing:
+      quantize/quant_linear.py  (forward_w4a4, fused Triton quant/compress, pack)
+  - Inference loader + accuracy evaluation entry point:
+      eval_model.py
+  - < TODO: list any other files you wrote or materially changed >

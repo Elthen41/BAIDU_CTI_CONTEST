@@ -1,0 +1,931 @@
+[3736646] python3.10@127.0.0.1
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<512, 1024, 1>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (8, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.77
+    Elapsed Cycles                cycle      258,393
+    Memory Throughput                 %        43.96
+    DRAM Throughput                   %         5.83
+    Duration                         us       337.86
+    L1/TEX Cache Throughput           %        62.46
+    L2 Cache Throughput               %        41.68
+    SM Active Cycles              cycle   187,475.87
+    Compute (SM) Throughput           %        20.27
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        90.70
+    Mem Busy                                         %        43.96
+    Max Bandwidth                                    %        41.68
+    L1/TEX Hit Rate                                  %        18.35
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        94.21
+    Mem Pipes Busy                                   %        14.47
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        19.53
+    Issued Warp Per Scheduler                        0.20
+    No Eligible                            %        80.47
+    Active Warps Per Scheduler          warp         3.50
+    Eligible Warps Per Scheduler        warp         0.32
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 56.04%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.1 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.50 active warps per scheduler, but only an average of 0.32 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.93
+    Warp Cycles Per Executed Instruction           cycle        17.94
+    Avg. Active Threads Per Warp                                31.98
+    Avg. Not Predicated Off Threads Per Warp                    29.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        21.91
+    Achieved Active Warps Per SM           warp        14.02
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 56.04%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<1024, 512, 0>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (4, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.86
+    Elapsed Cycles                cycle      325,845
+    Memory Throughput                 %        32.88
+    DRAM Throughput                   %         5.68
+    Duration                         us       426.02
+    L1/TEX Cache Throughput           %        60.52
+    L2 Cache Throughput               %        28.26
+    SM Active Cycles              cycle   176,234.67
+    Compute (SM) Throughput           %        16.65
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        88.33
+    Mem Busy                                         %        32.88
+    Max Bandwidth                                    %        27.62
+    L1/TEX Hit Rate                                  %        10.26
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.19
+    Mem Pipes Busy                                   %        10.45
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        18.52
+    Issued Warp Per Scheduler                        0.19
+    No Eligible                            %        81.48
+    Active Warps Per Scheduler          warp         3.29
+    Eligible Warps Per Scheduler        warp         0.29
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 67.12%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.4 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.29 active warps per scheduler, but only an average of 0.29 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.75
+    Warp Cycles Per Executed Instruction           cycle        17.77
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.15
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.70
+    Achieved Active Warps Per SM           warp        13.24
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 67.12%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<512, 1024, 1>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (8, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.83
+    Elapsed Cycles                cycle      259,212
+    Memory Throughput                 %        45.18
+    DRAM Throughput                   %         5.76
+    Duration                         us       338.91
+    L1/TEX Cache Throughput           %        63.24
+    L2 Cache Throughput               %        41.55
+    SM Active Cycles              cycle   185,169.29
+    Compute (SM) Throughput           %        20.84
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        89.55
+    Mem Busy                                         %        45.18
+    Max Bandwidth                                    %        41.55
+    L1/TEX Hit Rate                                  %        18.38
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        93.92
+    Mem Pipes Busy                                   %        14.87
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        19.93
+    Issued Warp Per Scheduler                        0.20
+    No Eligible                            %        80.07
+    Active Warps Per Scheduler          warp         3.56
+    Eligible Warps Per Scheduler        warp         0.34
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 54.82%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.0 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.56 active warps per scheduler, but only an average of 0.34 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.85
+    Warp Cycles Per Executed Instruction           cycle        17.86
+    Avg. Active Threads Per Warp                                31.98
+    Avg. Not Predicated Off Threads Per Warp                    29.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.13
+    Achieved Active Warps Per SM           warp        14.16
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 54.82%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<1024, 512, 0>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (4, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.88
+    Elapsed Cycles                cycle      336,279
+    Memory Throughput                 %        34.18
+    DRAM Throughput                   %         5.51
+    Duration                         us       439.65
+    L1/TEX Cache Throughput           %        60.48
+    L2 Cache Throughput               %        27.33
+    SM Active Cycles              cycle   176,447.60
+    Compute (SM) Throughput           %        17.30
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        85.73
+    Mem Busy                                         %        34.18
+    Max Bandwidth                                    %        26.77
+    L1/TEX Hit Rate                                  %        10.38
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        89.76
+    Mem Pipes Busy                                   %        10.86
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        18.67
+    Issued Warp Per Scheduler                        0.19
+    No Eligible                            %        81.33
+    Active Warps Per Scheduler          warp         3.28
+    Eligible Warps Per Scheduler        warp         0.29
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 65.82%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.4 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.28 active warps per scheduler, but only an average of 0.29 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.58
+    Warp Cycles Per Executed Instruction           cycle        17.60
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.15
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.48
+    Achieved Active Warps Per SM           warp        13.11
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 65.82%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<512, 1024, 1>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (8, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.84
+    Elapsed Cycles                cycle      246,562
+    Memory Throughput                 %        47.89
+    DRAM Throughput                   %         5.78
+    Duration                         us       322.37
+    L1/TEX Cache Throughput           %        65.82
+    L2 Cache Throughput               %        43.79
+    SM Active Cycles              cycle   177,996.43
+    Compute (SM) Throughput           %        22.08
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        89.82
+    Mem Busy                                         %        47.89
+    Max Bandwidth                                    %        43.79
+    L1/TEX Hit Rate                                  %        18.39
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        93.70
+    Mem Pipes Busy                                   %        15.75
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        20.62
+    Issued Warp Per Scheduler                        0.21
+    No Eligible                            %        79.38
+    Active Warps Per Scheduler          warp         3.61
+    Eligible Warps Per Scheduler        warp         0.34
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 52.11%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 4.8 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.61 active warps per scheduler, but only an average of 0.34 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.49
+    Warp Cycles Per Executed Instruction           cycle        17.51
+    Avg. Active Threads Per Warp                                31.98
+    Avg. Not Predicated Off Threads Per Warp                    29.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.60
+    Achieved Active Warps Per SM           warp        14.46
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 52.11%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<1024, 512, 0>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (4, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.83
+    Elapsed Cycles                cycle      303,143
+    Memory Throughput                 %        33.14
+    DRAM Throughput                   %         6.20
+    Duration                         us       396.35
+    L1/TEX Cache Throughput           %        61.04
+    L2 Cache Throughput               %        30.49
+    SM Active Cycles              cycle   174,780.56
+    Compute (SM) Throughput           %        16.78
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        96.48
+    Mem Busy                                         %        33.14
+    Max Bandwidth                                    %        29.74
+    L1/TEX Hit Rate                                  %        10.31
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        89.43
+    Mem Pipes Busy                                   %        10.53
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        19.06
+    Issued Warp Per Scheduler                        0.19
+    No Eligible                            %        80.94
+    Active Warps Per Scheduler          warp         3.36
+    Eligible Warps Per Scheduler        warp         0.30
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 66.86%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.2 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.36 active warps per scheduler, but only an average of 0.30 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.65
+    Warp Cycles Per Executed Instruction           cycle        17.66
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.15
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.74
+    Achieved Active Warps Per SM           warp        13.27
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 66.86%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<512, 1024, 1>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (8, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.84
+    Elapsed Cycles                cycle      264,263
+    Memory Throughput                 %        45.06
+    DRAM Throughput                   %         5.78
+    Duration                         us       345.50
+    L1/TEX Cache Throughput           %        62.20
+    L2 Cache Throughput               %        40.80
+    SM Active Cycles              cycle   188,271.42
+    Compute (SM) Throughput           %        20.78
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        89.80
+    Mem Busy                                         %        45.06
+    Max Bandwidth                                    %        40.80
+    L1/TEX Hit Rate                                  %        18.38
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        94.10
+    Mem Pipes Busy                                   %        14.83
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        19.54
+    Issued Warp Per Scheduler                        0.20
+    No Eligible                            %        80.46
+    Active Warps Per Scheduler          warp         3.52
+    Eligible Warps Per Scheduler        warp         0.32
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 54.94%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.1 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.52 active warps per scheduler, but only an average of 0.32 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        18.03
+    Warp Cycles Per Executed Instruction           cycle        18.05
+    Avg. Active Threads Per Warp                                31.98
+    Avg. Not Predicated Off Threads Per Warp                    29.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.08
+    Achieved Active Warps Per SM           warp        14.13
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 54.94%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<1024, 512, 0>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (4, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.90
+    Elapsed Cycles                cycle      334,084
+    Memory Throughput                 %        32.23
+    DRAM Throughput                   %         8.89
+    Duration                         us       436.77
+    L1/TEX Cache Throughput           %        60.54
+    L2 Cache Throughput               %        27.81
+    SM Active Cycles              cycle   176,219.21
+    Compute (SM) Throughput           %        16.32
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       138.21
+    Mem Busy                                         %        32.23
+    Max Bandwidth                                    %        26.88
+    L1/TEX Hit Rate                                  %        10.44
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.39
+    Mem Pipes Busy                                   %        10.24
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        18.39
+    Issued Warp Per Scheduler                        0.18
+    No Eligible                            %        81.61
+    Active Warps Per Scheduler          warp         3.24
+    Eligible Warps Per Scheduler        warp         0.28
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 67.77%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.4 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.24 active warps per scheduler, but only an average of 0.28 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.65
+    Warp Cycles Per Executed Instruction           cycle        17.66
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.15
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.66
+    Achieved Active Warps Per SM           warp        13.22
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 67.77%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<512, 1024, 1>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (8, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.86
+    Elapsed Cycles                cycle      255,705
+    Memory Throughput                 %        44.16
+    DRAM Throughput                   %         5.98
+    Duration                         us       334.30
+    L1/TEX Cache Throughput           %        61.38
+    L2 Cache Throughput               %        42.00
+    SM Active Cycles              cycle   190,767.18
+    Compute (SM) Throughput           %        20.37
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        93.05
+    Mem Busy                                         %        44.16
+    Max Bandwidth                                    %        42.00
+    L1/TEX Hit Rate                                  %        18.27
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        93.92
+    Mem Pipes Busy                                   %        14.54
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        19.18
+    Issued Warp Per Scheduler                        0.19
+    No Eligible                            %        80.82
+    Active Warps Per Scheduler          warp         3.52
+    Eligible Warps Per Scheduler        warp         0.32
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 55.84%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.2 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.52 active warps per scheduler, but only an average of 0.32 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        18.36
+    Warp Cycles Per Executed Instruction           cycle        18.37
+    Avg. Active Threads Per Warp                                31.98
+    Avg. Not Predicated Off Threads Per Warp                    29.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        22.18
+    Achieved Active Warps Per SM           warp        14.20
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 55.84%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+  void <unnamed>::smoe_grouped_linear_mma_tn_kernel<1024, 512, 0>(const Half *, const Half *, const Half *, const int *, const int *, Half *) (4, 86, 8)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.21
+    SM Frequency                    Mhz       764.89
+    Elapsed Cycles                cycle      333,033
+    Memory Throughput                 %        31.06
+    DRAM Throughput                   %         5.55
+    Duration                         us       435.39
+    L1/TEX Cache Throughput           %        59.12
+    L2 Cache Throughput               %        27.70
+    SM Active Cycles              cycle   180,377.99
+    Compute (SM) Throughput           %        15.73
+    ----------------------- ----------- ------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                          no data
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        86.29
+    Mem Busy                                         %        31.06
+    Max Bandwidth                                    %        26.92
+    L1/TEX Hit Rate                                  %        10.30
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        90.02
+    Mem Pipes Busy                                   %         9.87
+    -------------------------------------- ----------- ------------
+
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        18.49
+    Issued Warp Per Scheduler                        0.18
+    No Eligible                            %        81.51
+    Active Warps Per Scheduler          warp         3.31
+    Eligible Warps Per Scheduler        warp         0.29
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 68.94%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 5.4 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 3.31 active warps per scheduler, but only an average of 0.29 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        17.91
+    Warp Cycles Per Executed Instruction           cycle        17.93
+    Avg. Active Threads Per Warp                                31.99
+    Avg. Not Predicated Off Threads Per Warp                    29.15
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            5
+    Block Limit Warps                     block            8
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        20.36
+    Achieved Active Warps Per SM           warp        13.03
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 68.94%                                                                                          
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
