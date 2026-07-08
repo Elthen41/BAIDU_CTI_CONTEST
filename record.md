@@ -40,6 +40,7 @@
 | embedding len 0/1/2 fast path | `CUDA/embedding_bag_kernels.cu` | `24s -> 25s` | 负优化，已回退。 |
 | SMoE pooled-M scheduler | `CUDA/smoe_kernels.cu` | `43s -> 52s` | 负优化，已回退到旧 `(expert, m_block)` scheduler。 |
 | CUDA dense-all SMoE 替代 PyTorch dense-all | `CUDA/dense_all_smoe_kernels.cu` | 不如 PyTorch dense-all | `infer.py` 接入已移除；主路径改用 routed sparse。 |
+| `move_batch_to_device()` API prefetch | `infer.py` | `13.4054s -> 16.1399s / 16.5082s` | 正确率不变但变慢；旧实现会在 `load_model()` 里预取 batch 0，且和 CUDA Graph preload 叠加成 CPU pinned batch -> prefetched GPU batch -> graph static GPU batch。已改成 lazy，并在 graph preload 活跃时禁用。 |
 
 ## 2026-07-06 W4A4 SMoE 实验
 

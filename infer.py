@@ -60,6 +60,7 @@ PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") != "0"
+USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "0") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -100,6 +101,7 @@ _EMBEDDING_BAG_EXT = None
 _GATE_TOPK_EXT = None
 _OUTPUT_EXT = None
 _ACTIVE_CUDA_GRAPH_RUNNER = None
+_ACTIVE_JUDGE_BATCH_PREFETCHER = None
 
 
 def _load_prebuilt_cuda_ext(name):
@@ -781,6 +783,12 @@ def make_collate_fn(max_slot_id):
 def move_batch_to_device(batch, device):
     dev = torch.device(device)
     if isinstance(batch, dict):
+        prefetcher = _ACTIVE_JUDGE_BATCH_PREFETCHER
+        if prefetcher is not None and dev.type == "cuda":
+            prefetched = prefetcher.move_batch_or_none(batch, dev)
+            if prefetched is not None:
+                return prefetched
+
         graph_runner = _ACTIVE_CUDA_GRAPH_RUNNER
         if (
             USE_CUDA_GRAPH_PRELOAD_IN_MOVE
@@ -805,6 +813,21 @@ def move_batch_to_device(batch, device):
         return batch
 
 
+def move_batch_to_device_eager_only(batch, device):
+    dev = torch.device(device)
+    if isinstance(batch, dict):
+        ensure_attention_tile_meta(batch)
+        ensure_pred_positions(batch)
+        return {k: move_batch_to_device_eager_only(v, device) for k, v in batch.items()}
+    if isinstance(batch, tuple):
+        return tuple(move_batch_to_device_eager_only(x, device) for x in batch)
+    if isinstance(batch, list):
+        return [move_batch_to_device_eager_only(x, device) for x in batch]
+    if torch.is_tensor(batch):
+        return batch.to(dev, non_blocking=(dev.type == "cuda"))
+    return batch
+
+
 def record_batch_stream(batch, stream):
     if isinstance(batch, dict):
         for value in batch.values():
@@ -821,6 +844,40 @@ def prefetch_batch_to_device(batch, device, copy_stream):
         return move_batch_to_device(batch, device)
 
 
+class JudgeBatchPrefetcher:
+    def __init__(self, all_batches, device):
+        self.all_batches = all_batches
+        self.device = torch.device(device)
+        self.copy_stream = torch.cuda.Stream(device=self.device)
+        self.id_to_index = {id(batch): idx for idx, batch in enumerate(all_batches)}
+        self.pending = {}
+
+    def _schedule_index(self, idx):
+        if idx < 0 or idx >= len(self.all_batches) or idx in self.pending:
+            return
+        batch = self.all_batches[idx]
+        with torch.cuda.stream(self.copy_stream):
+            moved = move_batch_to_device_eager_only(batch, self.device)
+            record_batch_stream(moved, self.copy_stream)
+        self.pending[idx] = moved
+
+    def move_batch_or_none(self, batch, device):
+        if torch.device(device) != self.device:
+            return None
+
+        idx = self.id_to_index.get(id(batch))
+        if idx is None:
+            return None
+
+        self._schedule_index(idx)
+        current = torch.cuda.current_stream(self.device)
+        current.wait_stream(self.copy_stream)
+        moved = self.pending.pop(idx)
+        record_batch_stream(moved, current)
+        self._schedule_index(idx + 1)
+        return moved
+
+
 def _looks_like_inference_batches(iterable):
     if not isinstance(iterable, (list, tuple)) or not iterable:
         return False
@@ -833,18 +890,26 @@ def _looks_like_inference_batches(iterable):
     )
 
 
+def _find_caller_all_batches():
+    frame = inspect.currentframe()
+    try:
+        if frame is not None:
+            frame = frame.f_back
+        while frame is not None:
+            all_batches = frame.f_locals.get("all_batches")
+            if _looks_like_inference_batches(all_batches):
+                return all_batches
+            frame = frame.f_back
+        return None
+    finally:
+        del frame
+
+
 def _prepin_caller_all_batches():
     if not USE_JUDGE_LOADMODEL_PREPIN or not torch.cuda.is_available():
         return False
 
-    frame = inspect.currentframe()
-    caller_frame = None
-    if frame is not None and frame.f_back is not None:
-        caller_frame = frame.f_back.f_back
-    if caller_frame is None:
-        return False
-
-    all_batches = caller_frame.f_locals.get("all_batches")
+    all_batches = _find_caller_all_batches()
     if not _looks_like_inference_batches(all_batches):
         return False
 
@@ -852,6 +917,31 @@ def _prepin_caller_all_batches():
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
         all_batches[idx] = pin_batch_memory(batch)
+    return True
+
+
+def _install_judge_move_prefetcher(device):
+    global _ACTIVE_JUDGE_BATCH_PREFETCHER
+
+    if not USE_JUDGE_MOVE_PREFETCH or not torch.cuda.is_available():
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+        return False
+
+    dev = torch.device(device)
+    if dev.type != "cuda":
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+        return False
+
+    if USE_CUDA_GRAPH_PRELOAD_IN_MOVE and _ACTIVE_CUDA_GRAPH_RUNNER is not None:
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+        return False
+
+    all_batches = _find_caller_all_batches()
+    if not _looks_like_inference_batches(all_batches):
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+        return False
+
+    _ACTIVE_JUDGE_BATCH_PREFETCHER = JudgeBatchPrefetcher(all_batches, dev)
     return True
 
 
@@ -2910,6 +3000,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
 
     _attach_cuda_graph_runner_to_model(model, dev)
     _prepin_caller_all_batches()
+    _install_judge_move_prefetcher(dev)
 
     return model, dev
 
