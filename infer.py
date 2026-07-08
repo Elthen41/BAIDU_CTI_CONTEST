@@ -56,6 +56,7 @@ REQUIRE_CUDA_W4A16_SMOE = os.environ.get("REQUIRE_CUDA_W4A16_SMOE", "1") == "1"
 CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
+USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -92,6 +93,7 @@ _ROUTED_SMOE_EXT = None
 _EMBEDDING_BAG_EXT = None
 _GATE_TOPK_EXT = None
 _OUTPUT_EXT = None
+_ACTIVE_CUDA_GRAPH_RUNNER = None
 
 
 def _configure_ninja():
@@ -873,6 +875,17 @@ def make_collate_fn(max_slot_id):
 def move_batch_to_device(batch, device):
     dev = torch.device(device)
     if isinstance(batch, dict):
+        graph_runner = _ACTIVE_CUDA_GRAPH_RUNNER
+        if (
+            USE_CUDA_GRAPH_PRELOAD_IN_MOVE
+            and graph_runner is not None
+            and dev.type == "cuda"
+            and "_cuda_graph_staged_runner" not in batch
+        ):
+            staged_batch = graph_runner.stage_batch_or_none(batch)
+            if staged_batch is not None:
+                return staged_batch
+
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
         return {k: move_batch_to_device(v, device) for k, v in batch.items()}
@@ -2057,6 +2070,15 @@ class CTRModel(nn.Module):
         return encoder_output, moe_loss
 
     def forward(self, batch):
+        graph_runner = getattr(self, "_cuda_graph_runner", None)
+        if graph_runner is not None and not getattr(self, "_cuda_graph_forward_disabled", False):
+            graph_logits = graph_runner.replay_logits_or_none(batch)
+            if graph_logits is not None:
+                return graph_logits, None
+
+        return self._forward_eager(batch)
+
+    def _forward_eager(self, batch):
         encoder_output, moe_loss = self.encode(batch)
         if (
             self.linear.weight.is_cuda
@@ -2788,6 +2810,136 @@ def _resolve_ckpt_path(ckpt_path=None):
     return unique_candidates[0], unique_candidates
 
 
+def _is_graph_batch_sequence(value):
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) > 0
+        and isinstance(value[0], dict)
+        and "logid" in value[0]
+        and "user_offsets" in value[0]
+    )
+
+
+def _find_graph_batches_from_caller():
+    if os.environ.get("CUDA_GRAPH_USE_CALLER_BATCHES", "1") == "0":
+        return None, None
+
+    import inspect
+
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back
+        fallback = None
+        while frame is not None:
+            batches = frame.f_locals.get("all_batches")
+            if _is_graph_batch_sequence(batches):
+                return batches, "caller local all_batches"
+            for name, value in frame.f_locals.items():
+                if name == "all_batches":
+                    continue
+                if not _is_graph_batch_sequence(value):
+                    continue
+                if fallback is None or len(value) > len(fallback[0]):
+                    fallback = (value, f"caller local {name}")
+            frame = frame.f_back
+    finally:
+        del frame
+
+    if fallback is not None:
+        return fallback
+
+    return None, None
+
+
+def _cached_batch_dir_candidates():
+    candidates = []
+    env_cache_dir = os.environ.get("CUDA_GRAPH_BATCH_CACHE_DIR")
+    if env_cache_dir:
+        candidates.append(Path(env_cache_dir))
+
+    candidates.extend([
+        SCRIPT_DIR / "code" / "dataset" / "cached_batches",
+        SCRIPT_DIR / "dataset" / "cached_batches",
+        Path.cwd() / "code" / "dataset" / "cached_batches",
+        Path.cwd() / "dataset" / "cached_batches",
+        Path.home() / "code" / "dataset" / "cached_batches",
+    ])
+    return candidates
+
+
+def _load_graph_batches_from_cache():
+    if os.environ.get("CUDA_GRAPH_USE_BATCH_CACHE", "1") == "0":
+        return None, None
+
+    seen = set()
+    for cache_dir in _cached_batch_dir_candidates():
+        cache_dir = cache_dir.expanduser()
+        if not cache_dir.is_absolute():
+            cache_dir = (Path.cwd() / cache_dir).resolve()
+        else:
+            cache_dir = cache_dir.resolve()
+        if cache_dir in seen:
+            continue
+        seen.add(cache_dir)
+
+        if not cache_dir.exists():
+            continue
+
+        shard_files = sorted(
+            cache_dir.glob("shard_*.pt"),
+            key=lambda p: int(p.stem.split("_")[1]),
+        )
+        if not shard_files:
+            continue
+
+        print(f"[INFO] loading CUDA Graph batch specs from cached shards: {cache_dir}")
+        all_batches = []
+        for shard_path in shard_files:
+            all_batches.extend(torch.load(shard_path, map_location="cpu", weights_only=False))
+        if _is_graph_batch_sequence(all_batches):
+            return all_batches, f"cached batch shards at {cache_dir}"
+
+    return None, None
+
+
+def _attach_cuda_graph_runner_to_model(model, dev):
+    global _ACTIVE_CUDA_GRAPH_RUNNER
+
+    if not USE_CUDA_GRAPH_INFER or dev.type != "cuda":
+        return None
+
+    existing = getattr(model, "_cuda_graph_runner", None)
+    if existing is not None:
+        _ACTIVE_CUDA_GRAPH_RUNNER = existing
+        return existing
+
+    all_batches, source = _find_graph_batches_from_caller()
+    if all_batches is None:
+        all_batches, source = _load_graph_batches_from_cache()
+
+    if all_batches is None:
+        print("[WARNING] CUDA Graph inference requested, but no all_batches/cache was available in load_model")
+        return None
+
+    try:
+        runner = CudaGraphBatchRunner(
+            model,
+            dev,
+            all_batches,
+            token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
+        )
+    except Exception as exc:
+        if os.environ.get("REQUIRE_CUDA_GRAPH_INFER", "0") == "1":
+            raise
+        print(f"[WARNING] CUDA Graph capture failed in load_model, falling back to eager forward: {exc}")
+        return None
+
+    model._cuda_graph_runner = runner
+    _ACTIVE_CUDA_GRAPH_RUNNER = runner
+    print(f"[INFO] Bound CUDA Graph runner to model.forward from {source}")
+    return runner
+
+
 # ============================================================
 # 模型加载入口
 # ============================================================
@@ -2943,6 +3095,8 @@ def load_model(ckpt_path=None, device='cuda:0'):
             print("[INFO] Using custom CUDA routed sparse SMoE")
         print("[INFO] Using custom CUDA routed sparse SMoE residual-add fusion")
 
+    _attach_cuda_graph_runner_to_model(model, dev)
+
     return model, dev
 
 
@@ -3076,6 +3230,7 @@ class CudaGraphBatchRunner:
         self.device = torch.device(device)
         self.token_bucket = int(token_bucket)
         self.runners = {}
+        self._fallback_warned = False
 
         specs = _build_cuda_graph_specs(all_batches, self.token_bucket)
         if not specs:
@@ -3087,6 +3242,43 @@ class CudaGraphBatchRunner:
         )
         for spec in specs:
             self.runners[spec["key"]] = self._capture_runner(spec, all_batches)
+
+    def _model_forward_eager(self, batch):
+        if hasattr(self.model, "_forward_eager"):
+            return self.model._forward_eager(batch)
+
+        old_disabled = getattr(self.model, "_cuda_graph_forward_disabled", False)
+        self.model._cuda_graph_forward_disabled = True
+        try:
+            return self.model(batch)
+        finally:
+            self.model._cuda_graph_forward_disabled = old_disabled
+
+    def _lookup_runner(self, batch):
+        tokens = _batch_token_count(batch)
+        users = _batch_user_count(batch)
+        token_cap = _round_up(tokens, self.token_bucket)
+        return self.runners.get((users, token_cap)), tokens
+
+    def _batch_fits_runner(self, runner, batch):
+        if runner is None:
+            return False
+
+        spec = runner["spec"]
+        meta = _ensure_cpu_attention_meta(batch)
+        if int(meta.size(0)) > int(spec["meta_cap"]):
+            return False
+
+        for slot in range(1, 29):
+            if int(batch[slot][0].numel()) > int(spec["slot_value_caps"][slot]):
+                return False
+        return True
+
+    def _warn_fallback_once(self, reason):
+        if self._fallback_warned:
+            return
+        self._fallback_warned = True
+        print(f"[WARNING] CUDA Graph replay skipped for at least one batch; eager forward fallback enabled ({reason})")
 
     def _select_sample_batch(self, spec, all_batches):
         users, token_cap = spec["key"]
@@ -3103,6 +3295,8 @@ class CudaGraphBatchRunner:
         token_cap = spec["token_cap"]
         users = spec["users"]
         static_batch = {
+            "logid": torch.empty((token_cap,), device=self.device, dtype=torch.long),
+            "pred_mask": torch.empty((token_cap,), device=self.device, dtype=torch.bool),
             "user_offsets": torch.empty((users + 1,), device=self.device, dtype=torch.long),
             "attention_tile_meta_mma": torch.empty(
                 (max(1, spec["meta_cap"]), 4),
@@ -3138,6 +3332,10 @@ class CudaGraphBatchRunner:
         meta = _ensure_cpu_attention_meta(batch)
 
         static_batch["_graph_active_rows"].fill_(tokens)
+        if "logid" in batch:
+            static_batch["logid"][:tokens].copy_(batch["logid"], non_blocking=True)
+        if "pred_mask" in batch:
+            static_batch["pred_mask"][:tokens].copy_(batch["pred_mask"], non_blocking=True)
         static_batch["user_offsets"].copy_(batch["user_offsets"], non_blocking=True)
 
         static_meta = static_batch["attention_tile_meta_mma"]
@@ -3159,22 +3357,20 @@ class CudaGraphBatchRunner:
         self._copy_batch_to_static(runner, sample_batch)
         torch.cuda.synchronize(self.device)
 
-        with torch.inference_mode():
+        with torch.no_grad():
             for _ in range(CUDA_GRAPH_WARMUP_ITERS):
-                logits, _ = self.model(static_batch)
-                probs = torch.sigmoid(logits.squeeze(-1))
+                logits, _ = self._model_forward_eager(static_batch)
             torch.cuda.synchronize(self.device)
 
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph):
-                logits, _ = self.model(static_batch)
-                static_probs = torch.sigmoid(logits.squeeze(-1))
+                static_logits, _ = self._model_forward_eager(static_batch)
 
             graph.replay()
             torch.cuda.synchronize(self.device)
 
         runner["graph"] = graph
-        runner["probs"] = static_probs
+        runner["logits"] = static_logits
         print(
             "[INFO] captured CUDA graph bucket "
             f"users={spec['users']}, token_cap={spec['token_cap']}, "
@@ -3183,13 +3379,58 @@ class CudaGraphBatchRunner:
         return runner
 
     def replay(self, batch):
-        tokens = _batch_token_count(batch)
-        users = _batch_user_count(batch)
-        token_cap = _round_up(tokens, self.token_bucket)
-        runner = self.runners[(users, token_cap)]
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            raise RuntimeError("CUDA Graph bucket missing or undersized for current batch")
         self._copy_batch_to_static(runner, batch)
         runner["graph"].replay()
-        return runner["probs"], tokens
+        return torch.sigmoid(runner["logits"].squeeze(-1)), tokens
+
+    def stage_batch_or_none(self, batch):
+        if not (
+            isinstance(batch, dict)
+            and "logid" in batch
+            and "pred_mask" in batch
+            and "user_offsets" in batch
+        ):
+            return None
+
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            return None
+
+        self._copy_batch_to_static(runner, batch)
+        static_batch = runner["batch"]
+        return {
+            "logid": static_batch["logid"][:tokens],
+            "pred_mask": static_batch["pred_mask"][:tokens],
+            "_cuda_graph_owner": self,
+            "_cuda_graph_staged_runner": runner,
+            "_cuda_graph_tokens": tokens,
+        }
+
+    def replay_logits_or_none(self, batch):
+        if isinstance(batch, dict) and batch.get("_cuda_graph_owner") is self:
+            runner = batch.get("_cuda_graph_staged_runner")
+            tokens = int(batch.get("_cuda_graph_tokens", 0))
+            if runner is not None and tokens > 0:
+                runner["graph"].replay()
+                logits = runner["logits"]
+                if logits.size(0) != tokens:
+                    logits = logits[:tokens]
+                return logits
+
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            self._warn_fallback_once("missing bucket or undersized static buffers")
+            return None
+
+        self._copy_batch_to_static(runner, batch)
+        runner["graph"].replay()
+        logits = runner["logits"]
+        if logits.size(0) != tokens:
+            logits = logits[:tokens]
+        return logits
 
 
 # ============================================================
@@ -3312,38 +3553,19 @@ def main():
 
     # ----- 加载模型 -----
     model, dev = load_model(ckpt_path=args.ckpt)
-    graph_runner = None
-    if USE_CUDA_GRAPH_INFER and dev.type == "cuda":
-        graph_runner = CudaGraphBatchRunner(
-            model,
-            dev,
-            all_batches,
-            token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
-        )
 
     # ----- 推理 -----
     print('*' * 20 + ' start inference ' + '*' * 20)
     all_logids = []
     all_probs = []
     time_sum = 0.0
-    t_start = time.time()
-    with torch.inference_mode():
-        for batch in tqdm(all_batches, desc="Inference"):
-            if graph_runner is not None:
-                ensure_pred_positions(batch)
-                probs, _ = graph_runner.replay(batch)
-                pred_positions = batch["pred_positions"]
-                if pred_positions.numel() == 0:
-                    continue
-                pred_positions_dev = pred_positions.to(dev, non_blocking=True)
-                masked_probs = probs.index_select(0, pred_positions_dev).cpu().tolist()
-                masked_logids = batch["logid"].index_select(0, pred_positions).tolist()
-                all_logids.extend(masked_logids)
-                all_probs.extend(masked_probs)
-                continue
 
+    t_start = time.time()
+    with torch.no_grad():
+        for batch in tqdm(all_batches, desc="Inference"):
             batch = move_batch_to_device(batch, dev)
             pred_mask = batch["pred_mask"].bool()
+
             logits, moe_loss = model(batch)
             logits = logits.squeeze(-1)
             probs = torch.sigmoid(logits)
@@ -3352,9 +3574,8 @@ def main():
             masked_probs = probs[pred_mask].cpu().tolist()
             all_logids.extend(masked_logids)
             all_probs.extend(masked_probs)
-    if dev.type == "cuda":
-        torch.cuda.synchronize(dev)
     time_sum += time.time() - t_start
+
     print(f'[INFO] inference time: {round(time_sum, 4)}s')
     print('*' * 20 + ' end inference ' + '*' * 20)
 
