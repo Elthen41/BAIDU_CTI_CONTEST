@@ -8,7 +8,7 @@ process is using the GPU, stop and do not run inference.
 | ---------- | -------: | -------: | -------: | ------------: | ----------: | --------: | ----------------------------------------------------- |
 | `4d9d8f50` | 0.760742 | 1.063921 | 17.1683s |      0.942772 |    0.323558 | 75.700802 | Remote A800, synced local source, CUDA Graph enabled. |
 | `4d9d8f50` | 0.760742 | 1.063921 | 18.8907s |      0.937031 |    0.323558 | 75.298904 | Judge-style run: no env flags, no CLI flags. |
-| `3196698`  | 0.760742 | 1.063921 |  1.7852s |      0.994049 |    0.323558 | 79.290184 | Baseline `main()` with CUDA Graph installed in `load_model()`. |
+| `5ff17c3`  | 0.760742 | 1.063921 |  1.7852s |      0.994049 |    0.323558 | 79.290184 | Baseline `main()` with CUDA Graph installed in `load_model()`. |
 
 ## Run Notes
 
