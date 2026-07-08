@@ -9,23 +9,40 @@ export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
 if [ -n "${PYTHON_BIN:-}" ]; then
-  :
-elif command -v python >/dev/null 2>&1; then
-  PYTHON_BIN=python
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN=python3
+  if ! "$PYTHON_BIN" -c 'import torch' >/dev/null 2>&1; then
+    echo "[ERROR] PYTHON_BIN=$PYTHON_BIN cannot import torch" >&2
+    exit 1
+  fi
 else
-  echo "[ERROR] neither python nor python3 was found" >&2
-  exit 1
+  PYTHON_BIN=""
+  for candidate in \
+    /home/aistudio/.conda/envs/pytorch-env/bin/python \
+    /opt/conda/envs/python35-paddle120-env/bin/python \
+    python \
+    python3
+  do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import torch' >/dev/null 2>&1; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  done
+  if [ -z "$PYTHON_BIN" ]; then
+    echo "[ERROR] no Python executable with torch was found" >&2
+    exit 1
+  fi
 fi
 
-if "$PYTHON_BIN" -c 'import cmake' >/dev/null 2>&1; then
-  CMAKE_BIN="$PYTHON_BIN -m cmake"
-elif command -v cmake >/dev/null 2>&1; then
+if command -v cmake >/dev/null 2>&1; then
   CMAKE_BIN=cmake
+elif "$PYTHON_BIN" -c 'import cmake' >/dev/null 2>&1; then
+  CMAKE_BIN="$PYTHON_BIN -m cmake"
 else
-  echo "[ERROR] cmake was not found; install cmake from requirements.txt before running build_env.sh" >&2
-  exit 1
+  echo "[INFO] cmake not found, installing local Python cmake wheel into ./libraries"
+  "$PYTHON_BIN" -m pip install \
+    --target "$ROOT_DIR/libraries" \
+    -i https://mirrors.aliyun.com/pypi/simple \
+    --upgrade cmake
+  CMAKE_BIN="$PYTHON_BIN -m cmake"
 fi
 
 BUILD_DIR="$ROOT_DIR/build/cmake_cuda_ext"
