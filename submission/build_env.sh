@@ -4,7 +4,9 @@ set -eu
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$ROOT_DIR"
 
-export PYTHONPATH="$ROOT_DIR/libraries:${PYTHONPATH:-}"
+LOCAL_LIBRARIES="$ROOT_DIR/libraries"
+PARENT_LIBRARIES="$(CDPATH= cd -- "$ROOT_DIR/.." && pwd)/libraries"
+export PYTHONPATH="$LOCAL_LIBRARIES:$PARENT_LIBRARIES:${PYTHONPATH:-}"
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
@@ -39,7 +41,7 @@ elif "$PYTHON_BIN" -c 'import cmake' >/dev/null 2>&1; then
 else
   echo "[INFO] cmake not found, installing local Python cmake wheel into ./libraries"
   "$PYTHON_BIN" -m pip install \
-    --target "$ROOT_DIR/libraries" \
+    --target "$LOCAL_LIBRARIES" \
     -i https://mirrors.aliyun.com/pypi/simple \
     --upgrade cmake
   CMAKE_BIN="$PYTHON_BIN -m cmake"

@@ -11,6 +11,7 @@ from collections import defaultdict
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_LIBRARIES = (SCRIPT_DIR / "libraries").resolve()
+PARENT_LIBRARIES = (SCRIPT_DIR.parent / "libraries").resolve()
 TORCH_EXTENSIONS_DIR = (SCRIPT_DIR / ".torch_extensions").resolve()
 CMAKE_EXTENSIONS_DIR = (SCRIPT_DIR / "cmake_extensions").resolve()
 
@@ -74,6 +75,8 @@ if USE_SIMPLE_W4A4_FC1_SMOE and not USE_SIMPLE_W4A4_SMOE:
 
 if PROJECT_LIBRARIES.exists():
     sys.path.insert(0, str(PROJECT_LIBRARIES))
+if PARENT_LIBRARIES.exists():
+    sys.path.insert(0, str(PARENT_LIBRARIES))
 if CMAKE_EXTENSIONS_DIR.exists():
     sys.path.insert(0, str(CMAKE_EXTENSIONS_DIR))
 
