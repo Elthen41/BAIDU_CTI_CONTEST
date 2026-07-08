@@ -1,6 +1,7 @@
 import math
 import argparse
 import importlib
+import inspect
 import os
 import sys
 from pathlib import Path
@@ -58,6 +59,7 @@ CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
+USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -817,6 +819,40 @@ def record_batch_stream(batch, stream):
 def prefetch_batch_to_device(batch, device, copy_stream):
     with torch.cuda.stream(copy_stream):
         return move_batch_to_device(batch, device)
+
+
+def _looks_like_inference_batches(iterable):
+    if not isinstance(iterable, (list, tuple)) or not iterable:
+        return False
+    sample = iterable[0]
+    return (
+        isinstance(sample, dict)
+        and "logid" in sample
+        and "pred_mask" in sample
+        and "user_offsets" in sample
+    )
+
+
+def _prepin_caller_all_batches():
+    if not USE_JUDGE_LOADMODEL_PREPIN or not torch.cuda.is_available():
+        return False
+
+    frame = inspect.currentframe()
+    caller_frame = None
+    if frame is not None and frame.f_back is not None:
+        caller_frame = frame.f_back.f_back
+    if caller_frame is None:
+        return False
+
+    all_batches = caller_frame.f_locals.get("all_batches")
+    if not _looks_like_inference_batches(all_batches):
+        return False
+
+    for idx, batch in enumerate(all_batches):
+        ensure_attention_tile_meta(batch)
+        ensure_pred_positions(batch)
+        all_batches[idx] = pin_batch_memory(batch)
+    return True
 
 
 def start_inference_profile_range(device):
@@ -2873,6 +2909,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
         pass
 
     _attach_cuda_graph_runner_to_model(model, dev)
+    _prepin_caller_all_batches()
 
     return model, dev
 

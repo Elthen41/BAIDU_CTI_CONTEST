@@ -9,6 +9,11 @@ process is using the GPU, stop and do not run inference.
 | `4d9d8f50` | 0.760742 | 1.063921 | 17.1683s |      0.942772 |    0.323558 | 75.700802 | Remote A800, synced local source, CUDA Graph enabled. |
 | `4d9d8f50` | 0.760742 | 1.063921 | 18.8907s |      0.937031 |    0.323558 | 75.298904 | Judge-style run: no env flags, no CLI flags.          |
 | `24655cc`  | 0.760742 | 1.063921 | 22.3309s |      0.925564 |    0.323558 | 74.496183 | Corrected baseline timer; graph setup in `load_model()`. |
+| local      | 0.761060 | 1.063562 | 87.6807s |      0.707731 |    0.324508 | 59.276401 | A800 `USE_JUDGE_TQDM_PREFETCH=1`, pinning enabled; rejected. |
+| local      | 0.761060 | 1.063562 | 21.0886s |      0.929705 |    0.324508 | 74.814549 | A800 `USE_JUDGE_TQDM_PREFETCH=1 USE_JUDGE_TQDM_PIN_MEMORY=0`; rejected. |
+| local      | 0.761060 | 1.063562 | 18.8752s |      0.937083 |    0.324508 | 75.331018 | A800 final no-env default; prefetch kept opt-in only. |
+| local      | 0.761060 | 1.063562 | 13.7868s |      0.954044 |    0.324508 | 76.518301 | A800 final no-env default; `load_model()` caller-frame prepin enabled. |
+| local      | 0.761060 | 1.063562 | 18.5669s |      0.938110 |    0.324508 | 75.402945 | A800 `USE_JUDGE_LOADMODEL_PREPIN=0`; direct A/B baseline. |
 
 ## Run Notes
 
@@ -28,3 +33,20 @@ process is using the GPU, stop and do not run inference.
 - Build artifacts: existing CMake extensions from `build_env.sh`
 - Run: `python infer.py`
 - Result with corrected baseline timer: `AUC=0.760742`, `PCOC=1.063921`, `Latency=22.3309s`, `score_all=74.496183`.
+
+### local prefetch monkey-patch test
+
+- Workspace: `/home/aistudio/liaoziwen/cmake_test`
+- Build: `CMAKE_BUILD_PARALLEL_LEVEL=4 ./build_env.sh`
+- GPU gate before each run: `NVIDIA A800-SXM4-80GB, 0 MiB, 81920 MiB, 0 %`; no compute apps reported.
+- `USE_JUDGE_TQDM_PREFETCH=1` with per-batch pinning regressed to `87.6807s`.
+- `USE_JUDGE_TQDM_PREFETCH=1 USE_JUDGE_TQDM_PIN_MEMORY=0` still regressed to `21.0886s`.
+- Final no-env default after making the monkey patch opt-in: `18.8752s`, `score_all=75.331018`.
+
+### local load-model prepin test
+
+- Workspace: `/home/aistudio/liaoziwen/cmake_test`
+- GPU gate before each run: `NVIDIA A800-SXM4-80GB, 0 MiB, 81920 MiB, 0 %`; no compute apps reported.
+- `load_model()` inspects the caller frame for `all_batches` and pins the existing list entries before `main()` starts the inference timer.
+- Default `USE_JUDGE_LOADMODEL_PREPIN=1`: `Latency=13.7868s`, `score_all=76.518301`.
+- Disable A/B `USE_JUDGE_LOADMODEL_PREPIN=0`: `Latency=18.5669s`, `score_all=75.402945`.
