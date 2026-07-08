@@ -1,12 +1,20 @@
 import math
 import argparse
+import builtins
 import importlib
 import os
-import shutil
-import stat
 import sys
 from pathlib import Path
 from collections import defaultdict
+
+
+_STDOUT_PRINT = builtins.print
+PRINT_LOGS = os.environ.get("CTI_PRINT", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def print(*args, **kwargs):
+    if PRINT_LOGS or sys._getframe(1).f_code.co_name == "main":
+        _STDOUT_PRINT(*args, **kwargs)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -87,7 +95,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.cpp_extension import load
 from tqdm import tqdm
 
 
@@ -103,7 +110,7 @@ _OUTPUT_EXT = None
 
 def _load_prebuilt_cuda_ext(name):
     if os.environ.get("USE_PREBUILT_CUDA_EXT", "1") == "0":
-        return None
+        raise RuntimeError("USE_PREBUILT_CUDA_EXT=0 is no longer supported; run build_env.sh first")
     if CMAKE_EXTENSIONS_DIR.exists():
         path = str(CMAKE_EXTENSIONS_DIR)
         if path not in sys.path:
@@ -111,328 +118,10 @@ def _load_prebuilt_cuda_ext(name):
     try:
         return importlib.import_module(name)
     except ImportError as exc:
-        if os.environ.get("REQUIRE_PREBUILT_CUDA_EXT", "1") != "0":
-            raise RuntimeError(
-                f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}"
-            ) from exc
-        if os.environ.get("CUDA_EXT_VERBOSE", "0") != "0":
-            print(f"[INFO] prebuilt CUDA extension {name!r} unavailable, falling back to JIT build: {exc}")
-        return None
-
-
-def _configure_ninja():
-    if shutil.which("ninja") is not None:
-        return
-
-    candidates = [
-        PROJECT_LIBRARIES / "bin" / "ninja",
-        PROJECT_LIBRARIES / "ninja" / "data" / "bin" / "ninja",
-    ]
-
-    try:
-        import ninja
-        bin_dir = getattr(ninja, "BIN_DIR", None)
-        if bin_dir is not None:
-            candidates.append(Path(bin_dir) / "ninja")
-    except ImportError:
-        pass
-
-    if PROJECT_LIBRARIES.exists():
-        candidates.extend(path for path in PROJECT_LIBRARIES.rglob("ninja") if path.is_file())
-
-    seen = set()
-    for candidate in candidates:
-        candidate = candidate.resolve()
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-
-        if candidate.exists():
-            mode = candidate.stat().st_mode
-            if not mode & stat.S_IXUSR:
-                candidate.chmod(mode | stat.S_IXUSR)
-            os.environ["PATH"] = str(candidate.parent) + os.pathsep + os.environ.get("PATH", "")
-            if shutil.which("ninja") is not None:
-                print(f"[INFO] using local ninja: {candidate}")
-                return
-
-    raise RuntimeError(
-        "Ninja is required to build the custom CUDA LayerNorm extension. "
-        "Install it with: python -m pip install --target ./libraries --upgrade ninja"
-    )
-
-
-def _configure_cuda_arch():
-    if "TORCH_CUDA_ARCH_LIST" in os.environ or not torch.cuda.is_available():
-        return
-
-    major, minor = torch.cuda.get_device_capability()
-    os.environ["TORCH_CUDA_ARCH_LIST"] = f"{major}.{minor}"
-    print(f"[INFO] using TORCH_CUDA_ARCH_LIST={os.environ['TORCH_CUDA_ARCH_LIST']}")
-
-
-def _cuda_ext_verbose():
-    return os.environ.get("CUDA_EXT_VERBOSE", "0") != "0"
-
-
-def _attention_tiled_cuda_flags():
-    config = {}
-    if os.environ.get("USE_FAST_ATTENTION_EXP", "0") != "0":
-        config["USE_FAST_ATTENTION_EXP"] = 1
-    if config:
-        summary = ", ".join(f"{key}={value}" for key, value in config.items())
-        print(f"[INFO] using attention compile config: {summary}")
-    return [f"-D{key}={value}" for key, value in config.items()]
-
-
-def _routed_smoe_cuda_flags():
-    flags = []
-    maxrregcount = os.environ.get("SMOE_MAXRREGCOUNT", "80")
-    try:
-        parsed = int(maxrregcount)
-    except ValueError as exc:
-        raise RuntimeError(f"SMOE_MAXRREGCOUNT must be an integer, got {maxrregcount!r}") from exc
-    if parsed <= 0:
-        raise RuntimeError(f"SMOE_MAXRREGCOUNT must be positive, got {parsed}")
-    print(f"[INFO] using routed SMoE compile config: SMOE_MAXRREGCOUNT={parsed}")
-    flags.append(f"--maxrregcount={parsed}")
-    if USE_CUTLASS_SMOE:
-        print("[INFO] enabling CUTLASS SMoE fc2-only compile path")
-        flags.append("-DBAIDU_CTI_ENABLE_CUTLASS_SMOE=1")
-    return flags
-
-
-def _cutlass_include_paths():
-    cutlass_root = Path(os.environ.get("CUTLASS_ROOT", SCRIPT_DIR / "third_party" / "cutlass")).expanduser()
-    if not cutlass_root.is_absolute():
-        cutlass_root = (Path.cwd() / cutlass_root).resolve()
-    else:
-        cutlass_root = cutlass_root.resolve()
-
-    include_dir = cutlass_root / "include"
-    util_include_dir = cutlass_root / "tools" / "util" / "include"
-    if not include_dir.exists() or not util_include_dir.exists():
-        if USE_CUTLASS_SMOE:
-            raise FileNotFoundError(
-                "CUTLASS include directories not found. Checked:\n"
-                f"  - {include_dir}\n"
-                f"  - {util_include_dir}"
-            )
-        return []
-    return [str(include_dir), str(util_include_dir)]
-
-
-def _resolve_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_NORM_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "norm_kernels.cu",
-        SCRIPT_DIR / "norm_kernels.cu",
-        Path.cwd() / "CUDA" / "norm_kernels.cu",
-        Path.cwd() / "norm_kernels.cu",
-        Path.home() / "code" / "CUDA" / "norm_kernels.cu",
-        Path.home() / "code" / "norm_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source norm_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
-
-
-def _resolve_attention_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_ATTENTION_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "attention_kernels.cu",
-        Path.cwd() / "CUDA" / "attention_kernels.cu",
-        Path.home() / "code" / "CUDA" / "attention_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source attention_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
-
-
-def _resolve_routed_smoe_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_ROUTED_SMOE_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "smoe_kernels.cu",
-        Path.cwd() / "CUDA" / "smoe_kernels.cu",
-        Path.home() / "code" / "CUDA" / "smoe_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source smoe_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
-
-
-def _resolve_embedding_bag_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_EMBEDDING_BAG_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "embedding_bag_kernels.cu",
-        Path.cwd() / "CUDA" / "embedding_bag_kernels.cu",
-        Path.home() / "code" / "CUDA" / "embedding_bag_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source embedding_bag_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
-
-
-def _resolve_gate_topk_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_GATE_TOPK_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "softmax_topk_kernels.cu",
-        Path.cwd() / "CUDA" / "softmax_topk_kernels.cu",
-        Path.home() / "code" / "CUDA" / "softmax_topk_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source softmax_topk_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
-
-
-def _resolve_output_cuda_src():
-    env_cuda_src = os.environ.get("CUDA_OUTPUT_SRC")
-    candidates = []
-    if env_cuda_src:
-        candidates.append(Path(env_cuda_src))
-
-    candidates.extend([
-        SCRIPT_DIR / "CUDA" / "output_kernels.cu",
-        Path.cwd() / "CUDA" / "output_kernels.cu",
-        Path.home() / "code" / "CUDA" / "output_kernels.cu",
-    ])
-
-    seen = set()
-    checked = []
-    for path in candidates:
-        path = path.expanduser()
-        if not path.is_absolute():
-            path = (Path.cwd() / path).resolve()
-        else:
-            path = path.resolve()
-
-        if path in seen:
-            continue
-        seen.add(path)
-        checked.append(path)
-
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Custom CUDA source output_kernels.cu not found. Checked:\n"
-        + "\n".join(f"  - {path}" for path in checked)
-    )
+        raise RuntimeError(
+            f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}; "
+            "run build_env.sh before infer.py"
+        ) from exc
 
 
 def _get_layernorm_ext():
@@ -441,20 +130,6 @@ def _get_layernorm_ext():
         return _LAYER_NORM_EXT
 
     _LAYER_NORM_EXT = _load_prebuilt_cuda_ext("layernorm_512_ext")
-    if _LAYER_NORM_EXT is not None:
-        return _LAYER_NORM_EXT
-
-    cuda_src = _resolve_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _LAYER_NORM_EXT = load(
-        name="layernorm_512_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
     return _LAYER_NORM_EXT
 
 
@@ -464,20 +139,6 @@ def _get_attention_ext():
         return _ATTENTION_EXT
 
     _ATTENTION_EXT = _load_prebuilt_cuda_ext("varlen_attention_ext")
-    if _ATTENTION_EXT is not None:
-        return _ATTENTION_EXT
-
-    cuda_src = _resolve_attention_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _ATTENTION_EXT = load(
-        name="varlen_attention_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"] + _attention_tiled_cuda_flags(),
-        verbose=_cuda_ext_verbose(),
-    )
     return _ATTENTION_EXT
 
 
@@ -487,21 +148,6 @@ def _get_routed_smoe_ext():
         return _ROUTED_SMOE_EXT
 
     _ROUTED_SMOE_EXT = _load_prebuilt_cuda_ext("routed_smoe_ext")
-    if _ROUTED_SMOE_EXT is not None:
-        return _ROUTED_SMOE_EXT
-
-    cuda_src = _resolve_routed_smoe_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _ROUTED_SMOE_EXT = load(
-        name="routed_smoe_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"] + _routed_smoe_cuda_flags(),
-        extra_include_paths=_cutlass_include_paths(),
-        verbose=_cuda_ext_verbose(),
-    )
     return _ROUTED_SMOE_EXT
 
 
@@ -511,20 +157,6 @@ def _get_embedding_bag_ext():
         return _EMBEDDING_BAG_EXT
 
     _EMBEDDING_BAG_EXT = _load_prebuilt_cuda_ext("embedding_bag_ext")
-    if _EMBEDDING_BAG_EXT is not None:
-        return _EMBEDDING_BAG_EXT
-
-    cuda_src = _resolve_embedding_bag_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _EMBEDDING_BAG_EXT = load(
-        name="embedding_bag_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
     return _EMBEDDING_BAG_EXT
 
 
@@ -534,20 +166,6 @@ def _get_gate_topk_ext():
         return _GATE_TOPK_EXT
 
     _GATE_TOPK_EXT = _load_prebuilt_cuda_ext("gate_topk_ext")
-    if _GATE_TOPK_EXT is not None:
-        return _GATE_TOPK_EXT
-
-    cuda_src = _resolve_gate_topk_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _GATE_TOPK_EXT = load(
-        name="gate_topk_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
     return _GATE_TOPK_EXT
 
 
@@ -557,20 +175,6 @@ def _get_output_ext():
         return _OUTPUT_EXT
 
     _OUTPUT_EXT = _load_prebuilt_cuda_ext("output_ext")
-    if _OUTPUT_EXT is not None:
-        return _OUTPUT_EXT
-
-    cuda_src = _resolve_output_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _OUTPUT_EXT = load(
-        name="output_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
     return _OUTPUT_EXT
 
 

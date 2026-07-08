@@ -22,3 +22,4 @@ ckpt.part.09
 build/
 cmake_extensions/
 __pycache__/
+*.zip
