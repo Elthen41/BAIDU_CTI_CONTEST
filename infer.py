@@ -3,6 +3,7 @@ import argparse
 import importlib
 import os
 import sys
+import atexit
 from pathlib import Path
 from collections import defaultdict
 
@@ -59,6 +60,10 @@ PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 USE_MINIMAL_BATCH_H2D = os.environ.get("USE_MINIMAL_BATCH_H2D", "1") != "0"
+USE_SMOE_FORWARD_ONLY_ROUTE_METADATA = os.environ.get("USE_SMOE_FORWARD_ONLY_ROUTE_METADATA", "1") != "0"
+USE_SMOE_ROUTE_PACK_4ROUTES = os.environ.get("USE_SMOE_ROUTE_PACK_4ROUTES", "1") != "0"
+PROFILE_SMOE_ROUTE_STATS = os.environ.get("PROFILE_SMOE_ROUTE_STATS", "0") == "1"
+PROFILE_SMOE_ROUTE_STATS_PRINT_FIRST = _env_positive_int("PROFILE_SMOE_ROUTE_STATS_PRINT_FIRST", 5)
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -1148,6 +1153,100 @@ def _is_w4a16_cuda_skeleton_unavailable(exc):
     )
 
 
+_SMOE_ROUTE_STATS = {
+    "registered": False,
+    "batches": 0,
+    "tokens": 0,
+    "actual_routes": 0,
+    "pad128": 0,
+    "pad64": 0,
+    "max_pad128_ratio": 0.0,
+    "max_pad64_ratio": 0.0,
+    "pad128_gt_115": 0,
+    "pad128_gt_130": 0,
+    "token_buckets": defaultdict(int),
+}
+
+
+def _print_smoe_route_stats_summary():
+    stats = _SMOE_ROUTE_STATS
+    batches = int(stats["batches"])
+    if batches <= 0:
+        return
+
+    actual = max(int(stats["actual_routes"]), 1)
+    avg_tokens = stats["tokens"] / batches
+    pad128_ratio = stats["pad128"] / actual
+    pad64_ratio = stats["pad64"] / actual
+    print(
+        "[INFO] SMoE route stats summary: "
+        f"batches={batches}, avg_tokens={avg_tokens:.1f}, "
+        f"pad128/actual={pad128_ratio:.3f}, pad64/actual={pad64_ratio:.3f}, "
+        f"max_pad128={stats['max_pad128_ratio']:.3f}, "
+        f"max_pad64={stats['max_pad64_ratio']:.3f}, "
+        f"pad128>1.15={stats['pad128_gt_115']}, "
+        f"pad128>1.30={stats['pad128_gt_130']}"
+    )
+    bucket_text = ", ".join(
+        f"{name}:{count}"
+        for name, count in sorted(stats["token_buckets"].items())
+    )
+    if bucket_text:
+        print(f"[INFO] SMoE route stats token buckets: {bucket_text}")
+
+
+def _record_smoe_route_stats(topk_idx):
+    if not PROFILE_SMOE_ROUTE_STATS:
+        return
+
+    stats = _SMOE_ROUTE_STATS
+    if not stats["registered"]:
+        atexit.register(_print_smoe_route_stats_summary)
+        stats["registered"] = True
+
+    with torch.no_grad():
+        flat = topk_idx.reshape(-1).to(torch.long)
+        counts = torch.bincount(flat, minlength=8)[:8].detach().cpu()
+
+    actual = int(counts.sum().item())
+    if actual <= 0:
+        return
+
+    tokens = actual // 2
+    pad128 = int((((counts + 127) // 128) * 128).sum().item())
+    pad64 = int((((counts + 63) // 64) * 64).sum().item())
+    ratio128 = pad128 / actual
+    ratio64 = pad64 / actual
+
+    stats["batches"] += 1
+    stats["tokens"] += tokens
+    stats["actual_routes"] += actual
+    stats["pad128"] += pad128
+    stats["pad64"] += pad64
+    stats["max_pad128_ratio"] = max(float(stats["max_pad128_ratio"]), ratio128)
+    stats["max_pad64_ratio"] = max(float(stats["max_pad64_ratio"]), ratio64)
+    stats["pad128_gt_115"] += int(ratio128 > 1.15)
+    stats["pad128_gt_130"] += int(ratio128 > 1.30)
+    if tokens < 128:
+        stats["token_buckets"]["<128"] += 1
+    elif tokens < 256:
+        stats["token_buckets"]["128-255"] += 1
+    elif tokens < 512:
+        stats["token_buckets"]["256-511"] += 1
+    elif tokens < 1024:
+        stats["token_buckets"]["512-1023"] += 1
+    else:
+        stats["token_buckets"][">=1024"] += 1
+
+    if stats["batches"] <= PROFILE_SMOE_ROUTE_STATS_PRINT_FIRST:
+        print(
+            "[INFO] SMoE route stats batch "
+            f"{stats['batches']}: tokens={tokens}, counts={counts.tolist()}, "
+            f"actual={actual}, pad128={pad128}, pad128/actual={ratio128:.3f}, "
+            f"pad64={pad64}, pad64/actual={ratio64:.3f}"
+        )
+
+
 class TopKGate(nn.Module):
     def __init__(self, d_model, num_experts, k=2, noisy_gating=True):
         super().__init__()
@@ -1400,7 +1499,12 @@ class SMoE(nn.Module):
         n_tokens = x_flat.shape[0]
 
         ext = _get_routed_smoe_ext()
-        fn_name = "smoe_forward_simple_w4a4" if USE_SIMPLE_W4A4_FC1_SMOE else "smoe_forward_simple_w4a4_fc2"
+        if USE_SIMPLE_W4A4_FC1_SMOE:
+            fn_name = "smoe_forward_simple_w4a4"
+        elif USE_M64_SMOE:
+            fn_name = "smoe_forward_simple_w4a4_fc2_m64"
+        else:
+            fn_name = "smoe_forward_simple_w4a4_fc2"
         if not hasattr(ext, fn_name):
             raise RuntimeError(f"routed_smoe_ext must export {fn_name}")
         if USE_SIMPLE_W4A4_FC1_SMOE:
@@ -1443,11 +1547,12 @@ class SMoE(nn.Module):
         n_tokens = x_flat.shape[0]
 
         ext = _get_routed_smoe_ext()
-        fn_name = (
-            "smoe_forward_simple_w4a4_with_residual"
-            if USE_SIMPLE_W4A4_FC1_SMOE
-            else "smoe_forward_simple_w4a4_fc2_with_residual"
-        )
+        if USE_SIMPLE_W4A4_FC1_SMOE:
+            fn_name = "smoe_forward_simple_w4a4_with_residual"
+        elif USE_M64_SMOE:
+            fn_name = "smoe_forward_simple_w4a4_fc2_m64_with_residual"
+        else:
+            fn_name = "smoe_forward_simple_w4a4_fc2_with_residual"
         if not hasattr(ext, fn_name):
             raise RuntimeError(f"routed_smoe_ext must export {fn_name}")
         if USE_SIMPLE_W4A4_FC1_SMOE:
@@ -1645,12 +1750,14 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
+        _record_smoe_route_stats(topk_idx)
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe"):
                 print(
                     "[INFO] SMoE using simple CUDA W4A4 fc2 path "
                     f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+                    f"m64={USE_M64_SMOE}, "
                     f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
                     f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
                     f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
@@ -1716,12 +1823,14 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse residual path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
+        _record_smoe_route_stats(topk_idx)
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe_residual"):
                 print(
                     "[INFO] SMoE using simple CUDA W4A4 fc2 path with residual add "
                     f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+                    f"m64={USE_M64_SMOE}, "
                     f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
                     f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
                     f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
@@ -2249,6 +2358,8 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
         if not (hasattr(moe, "_simple_w4a4_w1_pack") and hasattr(moe, "_simple_w4a4_b1")):
             return
         required_symbols = ("smoe_forward_simple_w4a4", "smoe_forward_simple_w4a4_with_residual")
+    elif USE_M64_SMOE:
+        required_symbols = ("smoe_forward_simple_w4a4_fc2_m64", "smoe_forward_simple_w4a4_fc2_m64_with_residual")
     else:
         required_symbols = ("smoe_forward_simple_w4a4_fc2", "smoe_forward_simple_w4a4_fc2_with_residual")
     missing = [name for name in required_symbols if not hasattr(ext, name)]
@@ -2281,7 +2392,12 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
                 float(SIMPLE_W4A4_FC2_OUTPUT_SCALE),
             )
         else:
-            ext.smoe_forward_simple_w4a4_fc2_with_residual(
+            fn = (
+                ext.smoe_forward_simple_w4a4_fc2_m64_with_residual
+                if USE_M64_SMOE
+                else ext.smoe_forward_simple_w4a4_fc2_with_residual
+            )
+            fn(
                 x,
                 residual,
                 moe._dense_all_w1_tn.contiguous(),
@@ -2298,6 +2414,7 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
     print(
         "[INFO] Loaded SMoE simple W4A4 fc2 extension "
         f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+        f"m64={USE_M64_SMOE}, "
         f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
         f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
         f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
@@ -2821,6 +2938,9 @@ def _attach_cuda_graph_runner_to_model(model, dev):
 
     if not USE_CUDA_GRAPH_INFER or dev.type != "cuda":
         return None
+    if PROFILE_SMOE_ROUTE_STATS:
+        print("[INFO] CUDA Graph inference disabled because PROFILE_SMOE_ROUTE_STATS=1")
+        return None
 
     existing = getattr(model, "_cuda_graph_runner", None)
     if existing is not None:
@@ -2972,6 +3092,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
         print(
             "[INFO] Using SMoE simple CUDA W4A4 fc2 experiment "
             f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+            f"m64={USE_M64_SMOE}, "
+            f"forward_only_route_meta={USE_SMOE_FORWARD_ONLY_ROUTE_METADATA}, "
+            f"route_pack_4routes={USE_SMOE_ROUTE_PACK_4ROUTES}, "
             f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
             f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
             f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "

@@ -36,6 +36,7 @@
 #endif
 
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <vector>
 
@@ -81,11 +82,20 @@ int64_t ceil_div_int64(int64_t a, int64_t b) {
     return (a + b - 1) / b;
 }
 
-int64_t max_pool_routes_for_tokens(int64_t n_tokens) {
+int64_t max_pool_routes_for_tokens(int64_t n_tokens, int64_t pad_multiple = kBlockM) {
     if (n_tokens == 0) {
         return 0;
     }
-    return n_tokens * kTopK + kNumExperts * (kBlockM - 1);
+    TORCH_CHECK(pad_multiple > 0, "pad_multiple must be positive");
+    return n_tokens * kTopK + kNumExperts * (pad_multiple - 1);
+}
+
+bool env_flag_enabled(const char* name, bool default_value) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return default_value;
+    }
+    return !(value[0] == '0' && value[1] == '\0');
 }
 
 void check_half_cuda_contiguous(const torch::Tensor& tensor, const char* name) {
@@ -300,7 +310,8 @@ __global__ void smoe_route_count_kernel(
 __global__ void smoe_route_prefix_kernel(
     const int32_t* __restrict__ counts,
     int32_t* __restrict__ offsets,
-    int32_t* __restrict__ cursors
+    int32_t* __restrict__ cursors,
+    int32_t pad_multiple
 ) {
     if (threadIdx.x != 0 || blockIdx.x != 0) {
         return;
@@ -312,14 +323,14 @@ __global__ void smoe_route_prefix_kernel(
         offsets[expert] = running;
         cursors[expert] = running;
         const int32_t count = counts[expert];
-        const int32_t padded = ((count + kBlockM - 1) / kBlockM) * kBlockM;
+        const int32_t padded = ((count + pad_multiple - 1) / pad_multiple) * pad_multiple;
         running += padded;
     }
     offsets[kNumExperts] = running;
 }
 
-template <typename IndexT, typename ScoreT>
-__global__ void smoe_route_pack_kernel(
+template <typename IndexT, typename ScoreT, bool WriteDebugMetadata>
+__global__ void smoe_route_pack_one_route_kernel(
     const c10::Half* __restrict__ x,
     const IndexT* __restrict__ topk_idx,
     const ScoreT* __restrict__ topk_score,
@@ -348,9 +359,11 @@ __global__ void smoe_route_pack_kernel(
         shared_pos = atomicAdd(cursors + expert, 1);
         const int32_t pos = shared_pos;
         route_pos[token * kTopK + slot] = pos;
-        route_token[pos] = token;
-        route_slot[pos] = slot;
-        route_score[pos] = topk_score[route_id];
+        if constexpr (WriteDebugMetadata) {
+            route_token[pos] = token;
+            route_slot[pos] = slot;
+            route_score[pos] = topk_score[route_id];
+        }
     }
     __syncthreads();
     const int32_t pos = shared_pos;
@@ -363,6 +376,55 @@ __global__ void smoe_route_pack_kernel(
     for (int vec = threadIdx.x; vec < kVecsPerRow; vec += blockDim.x) {
         route_vec[vec] = x_vec[vec];
     }
+}
+
+template <typename IndexT, typename ScoreT, bool WriteDebugMetadata>
+__global__ void smoe_route_pack_kernel(
+    const c10::Half* __restrict__ x,
+    const IndexT* __restrict__ topk_idx,
+    const ScoreT* __restrict__ topk_score,
+    int32_t* __restrict__ cursors,
+    c10::Half* __restrict__ x_route,
+    int32_t* __restrict__ route_pos,
+    int32_t* __restrict__ route_token,
+    int32_t* __restrict__ route_slot,
+    ScoreT* __restrict__ route_score,
+    int64_t n_tokens
+) {
+    const int warp_id = threadIdx.x >> 5;
+    const int lane = threadIdx.x & (kWarpSize - 1);
+    const int64_t route_id = static_cast<int64_t>(blockIdx.x) * 4 + warp_id;
+    const int token = static_cast<int>(route_id >> 1);
+    const int slot = static_cast<int>(route_id & 1);
+    if (route_id >= n_tokens * kTopK) {
+        return;
+    }
+
+    const int expert = static_cast<int>(topk_idx[route_id]);
+    if (expert < 0 || expert >= kNumExperts) {
+        return;
+    }
+
+    int32_t pos = 0;
+    if (lane == 0) {
+        pos = atomicAdd(cursors + expert, 1);
+        route_pos[token * kTopK + slot] = pos;
+        if constexpr (WriteDebugMetadata) {
+            route_token[pos] = token;
+            route_slot[pos] = slot;
+            route_score[pos] = topk_score[route_id];
+        }
+    }
+    pos = __shfl_sync(0xffffffff, pos, 0);
+
+    const uint4* __restrict__ x_vec =
+        reinterpret_cast<const uint4*>(x + static_cast<int64_t>(token) * kHiddenDim);
+    uint4* __restrict__ route_vec =
+        reinterpret_cast<uint4*>(x_route + static_cast<int64_t>(pos) * kHiddenDim);
+    constexpr int kVecsPerRow = kHiddenDim / 8;
+    static_assert(kVecsPerRow == 64, "route pack assumes 64 uint4 vectors per row");
+    route_vec[lane] = x_vec[lane];
+    route_vec[lane + 32] = x_vec[lane + 32];
 }
 
 template <int InDim, int OutDim>
@@ -1331,6 +1393,161 @@ __global__ __launch_bounds__(kThreads) void smoe_grouped_linear_mma_tn_pack_w4a4
     }
 }
 
+template <int InDim, int OutDim, bool ApplyRelu>
+__global__ __launch_bounds__(kThreads) void smoe_grouped_linear_mma_tn_pack_w4a4_m64_kernel(
+    const c10::Half* __restrict__ input,
+    const c10::Half* __restrict__ weight,
+    const c10::Half* __restrict__ bias,
+    const int32_t* __restrict__ counts,
+    const int32_t* __restrict__ offsets,
+    int32_t* __restrict__ output_pack,
+    float inv_act_scale
+) {
+    static_assert(InDim % kMmaK == 0, "InDim must be divisible by 16");
+    static_assert(OutDim % kBlockN == 0, "OutDim must be divisible by kBlockN");
+    static_assert(OutDim % 8 == 0, "OutDim must be divisible by 8");
+
+    __shared__ __align__(16) c10::Half a_shared[kPipelineStages * kBlockM64 * kMmaK];
+    __shared__ __align__(16) c10::Half b_shared[kPipelineStages * kBlockN * kMmaK];
+
+    const int tid = threadIdx.x;
+    const int warp_id = tid / kWarpSize;
+    const int lane = tid & (kWarpSize - 1);
+    const int pool_m_tile_base = blockIdx.y * kBlockM64;
+    const int n_tile_base = blockIdx.x * kBlockN;
+
+    const int total_padded_routes = offsets[kNumExperts];
+    if (pool_m_tile_base >= total_padded_routes) {
+        return;
+    }
+
+    const int expert = find_expert_for_pool_m(offsets, pool_m_tile_base);
+    if (expert >= kNumExperts) {
+        return;
+    }
+
+    const int expert_offset = offsets[expert];
+    const int local_m_tile_base = pool_m_tile_base - expert_offset;
+    const int expert_count = counts[expert];
+    if (local_m_tile_base >= expert_count) {
+        return;
+    }
+
+    const int warp_m = warp_id & 1;
+    const int warp_n = warp_id >> 1;
+
+    uint32_t acc[kWarpTileM64][kWarpTileN][4];
+#pragma unroll
+    for (int i = 0; i < kWarpTileM64; ++i) {
+#pragma unroll
+        for (int j = 0; j < kWarpTileN; ++j) {
+#pragma unroll
+            for (int r = 0; r < 4; ++r) {
+                acc[i][j][r] = 0;
+            }
+        }
+    }
+
+    const bool full_m_tile = (local_m_tile_base + kBlockM64) <= expert_count;
+    constexpr int kNumKTiles = InDim / kMmaK;
+    constexpr int kStageStrideA = kBlockM64 * kMmaK;
+    constexpr int kStageStrideB = kBlockN * kMmaK;
+
+    if (full_m_tile) {
+        load_grouped_tile_cp_async_m64<InDim, OutDim>(
+            input, weight, offsets, a_shared, b_shared,
+            expert, local_m_tile_base, n_tile_base, 0, tid);
+        cp_async_commit_group();
+        cp_async_wait_all();
+        __syncthreads();
+
+        for (int k_tile = 1; k_tile < kNumKTiles; ++k_tile) {
+            const int compute_stage = (k_tile + 1) & 1;
+            const int load_stage = k_tile & 1;
+
+            load_grouped_tile_cp_async_m64<InDim, OutDim>(
+                input, weight, offsets,
+                a_shared + load_stage * kStageStrideA,
+                b_shared + load_stage * kStageStrideB,
+                expert, local_m_tile_base, n_tile_base, k_tile * kMmaK, tid);
+            cp_async_commit_group();
+
+            compute_grouped_mma_stage_m64(
+                a_shared + compute_stage * kStageStrideA,
+                b_shared + compute_stage * kStageStrideB,
+                warp_m, warp_n, lane, acc);
+
+            cp_async_wait_all();
+            __syncthreads();
+        }
+
+        constexpr int last_stage = (kNumKTiles - 1) & 1;
+        compute_grouped_mma_stage_m64(
+            a_shared + last_stage * kStageStrideA,
+            b_shared + last_stage * kStageStrideB,
+            warp_m, warp_n, lane, acc);
+    } else {
+        for (int k_base = 0; k_base < InDim; k_base += kMmaK) {
+            load_grouped_tile_scalar_m64<InDim, OutDim>(
+                input, weight, counts, offsets, a_shared, b_shared,
+                expert, local_m_tile_base, n_tile_base, k_base, tid);
+            __syncthreads();
+
+            compute_grouped_mma_stage_m64(
+                a_shared, b_shared, warp_m, warp_n, lane, acc);
+            __syncthreads();
+        }
+    }
+
+    const int row_base = local_m_tile_base + warp_m * (kMmaM * kWarpTileM64);
+    const int col_base = n_tile_base + warp_n * (kMmaN * kWarpTileN);
+    const int frag_row0 = lane / 4;
+    const int frag_row1 = frag_row0 + 8;
+    const int frag_col_pair = (lane & 3) * 2;
+    const int lane_group_base = lane & ~3;
+    constexpr int kPacksPerRow = OutDim / 8;
+
+#pragma unroll
+    for (int i = 0; i < kWarpTileM64; ++i) {
+#pragma unroll
+        for (int j = 0; j < kWarpTileN; ++j) {
+            const int rows[2] = {
+                row_base + i * kMmaM + frag_row0,
+                row_base + i * kMmaM + frag_row1,
+            };
+            const int col = col_base + j * kMmaN + frag_col_pair;
+
+#pragma unroll
+            for (int row_slot = 0; row_slot < 2; ++row_slot) {
+                const int route_m = rows[row_slot];
+                float value0 = reg_as_float(acc[i][j][row_slot * 2 + 0])
+                    + static_cast<float>(bias[expert * OutDim + col + 0]);
+                float value1 = reg_as_float(acc[i][j][row_slot * 2 + 1])
+                    + static_cast<float>(bias[expert * OutDim + col + 1]);
+                if constexpr (ApplyRelu) {
+                    value0 = fmaxf(value0, 0.0f);
+                    value1 = fmaxf(value1, 0.0f);
+                }
+
+                const uint32_t pair_bits = pack_s4_pair_bits_from_half_rounded(
+                    value0, value1, frag_col_pair, inv_act_scale);
+                const uint32_t word =
+                    __shfl_sync(0xffffffff, pair_bits, lane_group_base + 0)
+                    | __shfl_sync(0xffffffff, pair_bits, lane_group_base + 1)
+                    | __shfl_sync(0xffffffff, pair_bits, lane_group_base + 2)
+                    | __shfl_sync(0xffffffff, pair_bits, lane_group_base + 3);
+
+                if ((lane & 3) == 0 && route_m < expert_count) {
+                    const int64_t output_idx =
+                        (static_cast<int64_t>(expert_offset) + route_m) * kPacksPerRow
+                        + (col_base + j * kMmaN) / 8;
+                    output_pack[output_idx] = static_cast<int32_t>(word);
+                }
+            }
+        }
+    }
+}
+
 template <typename ScaleT>
 __device__ __forceinline__ float scalar_to_float(ScaleT value) {
     return static_cast<float>(value);
@@ -2084,7 +2301,7 @@ void launch_route_count(
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-template <typename IndexT, typename ScoreT>
+template <typename IndexT, typename ScoreT, bool WriteDebugMetadata>
 void launch_route_pack(
     const torch::Tensor& x,
     const torch::Tensor& topk_idx,
@@ -2102,19 +2319,51 @@ void launch_route_pack(
         return;
     }
 
-    smoe_route_pack_kernel<IndexT, ScoreT>
-        <<<static_cast<unsigned int>(total_routes), kThreads, 0, at::cuda::getCurrentCUDAStream()>>>(
-            x.data_ptr<c10::Half>(),
-            topk_idx.data_ptr<IndexT>(),
-            topk_score.data_ptr<ScoreT>(),
-            cursors.data_ptr<int32_t>(),
-            x_route.data_ptr<c10::Half>(),
-            route_pos.data_ptr<int32_t>(),
-            route_token.data_ptr<int32_t>(),
-            route_slot.data_ptr<int32_t>(),
-            route_score.data_ptr<ScoreT>(),
-            n_tokens
-        );
+    constexpr int kRoutePackThreads = 4 * kWarpSize;
+    constexpr int kRoutesPerCta = 4;
+    int32_t* route_token_ptr = nullptr;
+    int32_t* route_slot_ptr = nullptr;
+    ScoreT* route_score_ptr = nullptr;
+    if constexpr (WriteDebugMetadata) {
+        route_token_ptr = route_token.data_ptr<int32_t>();
+        route_slot_ptr = route_slot.data_ptr<int32_t>();
+        route_score_ptr = route_score.data_ptr<ScoreT>();
+    }
+    if (env_flag_enabled("USE_SMOE_ROUTE_PACK_4ROUTES", true)) {
+        smoe_route_pack_kernel<IndexT, ScoreT, WriteDebugMetadata>
+            <<<static_cast<unsigned int>(ceil_div_int64(total_routes, kRoutesPerCta)),
+               kRoutePackThreads,
+               0,
+               at::cuda::getCurrentCUDAStream()>>>(
+                x.data_ptr<c10::Half>(),
+                topk_idx.data_ptr<IndexT>(),
+                topk_score.data_ptr<ScoreT>(),
+                cursors.data_ptr<int32_t>(),
+                x_route.data_ptr<c10::Half>(),
+                route_pos.data_ptr<int32_t>(),
+                route_token_ptr,
+                route_slot_ptr,
+                route_score_ptr,
+                n_tokens
+            );
+    } else {
+        smoe_route_pack_one_route_kernel<IndexT, ScoreT, WriteDebugMetadata>
+            <<<static_cast<unsigned int>(total_routes),
+               kThreads,
+               0,
+               at::cuda::getCurrentCUDAStream()>>>(
+                x.data_ptr<c10::Half>(),
+                topk_idx.data_ptr<IndexT>(),
+                topk_score.data_ptr<ScoreT>(),
+                cursors.data_ptr<int32_t>(),
+                x_route.data_ptr<c10::Half>(),
+                route_pos.data_ptr<int32_t>(),
+                route_token_ptr,
+                route_slot_ptr,
+                route_score_ptr,
+                n_tokens
+            );
+    }
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
@@ -2201,6 +2450,66 @@ void launch_grouped_linear_pack_simple_w4a4(
         1
     );
     smoe_grouped_linear_mma_tn_pack_w4a4_kernel<InDim, OutDim, ApplyRelu>
+        <<<grid, block, 0, at::cuda::getCurrentCUDAStream()>>>(
+            input.data_ptr<c10::Half>(),
+            weight.data_ptr<c10::Half>(),
+            bias.data_ptr<c10::Half>(),
+            counts.data_ptr<int32_t>(),
+            offsets.data_ptr<int32_t>(),
+            output_pack.data_ptr<int32_t>(),
+            1.0f / static_cast<float>(act_scale)
+    );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+template <int InDim, int OutDim, bool ApplyRelu>
+void launch_grouped_linear_pack_simple_w4a4_m64(
+    const torch::Tensor& input,
+    const torch::Tensor& weight,
+    const torch::Tensor& bias,
+    const torch::Tensor& counts,
+    const torch::Tensor& offsets,
+    torch::Tensor& output_pack,
+    int64_t max_routes_per_expert,
+    double act_scale
+) {
+    if (max_routes_per_expert == 0 || input.size(0) == 0) {
+        return;
+    }
+    check_half_cuda_contiguous(input, "input");
+    check_half_cuda_contiguous(weight, "weight");
+    check_half_cuda_contiguous(bias, "bias");
+    check_i32_cuda_contiguous(counts, "counts");
+    check_i32_cuda_contiguous(offsets, "offsets");
+    check_i32_cuda_contiguous(output_pack, "output_pack");
+    check_same_device(input, weight, "input", "weight");
+    check_same_device(input, bias, "input", "bias");
+    check_same_device(input, counts, "input", "counts");
+    check_same_device(input, offsets, "input", "offsets");
+    check_same_device(input, output_pack, "input", "output_pack");
+    TORCH_CHECK(input.dim() == 2 && input.size(1) == InDim, "input has wrong shape");
+    TORCH_CHECK(
+        weight.dim() == 3
+        && weight.size(0) == kNumExperts
+        && weight.size(1) == OutDim
+        && weight.size(2) == InDim,
+        "weight has wrong shape"
+    );
+    TORCH_CHECK(bias.dim() == 2 && bias.size(0) == kNumExperts && bias.size(1) == OutDim,
+        "bias has wrong shape");
+    TORCH_CHECK(output_pack.dim() == 2 && output_pack.size(0) == input.size(0)
+        && output_pack.size(1) == OutDim / 8, "output_pack has wrong shape");
+    TORCH_CHECK(act_scale > 0.0, "simple W4A4 act_scale must be positive");
+    TORCH_CHECK(ceil_div_int64(input.size(0), kBlockM64) <= 65535,
+        "route pool creates too many CTA rows for M64 simple W4A4 pack");
+
+    const dim3 block(kThreads);
+    const dim3 grid(
+        static_cast<unsigned int>(OutDim / kBlockN),
+        static_cast<unsigned int>(ceil_div_int64(input.size(0), kBlockM64)),
+        1
+    );
+    smoe_grouped_linear_mma_tn_pack_w4a4_m64_kernel<InDim, OutDim, ApplyRelu>
         <<<grid, block, 0, at::cuda::getCurrentCUDAStream()>>>(
             input.data_ptr<c10::Half>(),
             weight.data_ptr<c10::Half>(),
@@ -3489,15 +3798,20 @@ void validate_w4a16_debug_weight(
     );
 }
 
-RouteMetadata build_route_metadata(
+RouteMetadata build_route_metadata_impl(
     torch::Tensor x,
     torch::Tensor topk_idx,
-    torch::Tensor topk_score
+    torch::Tensor topk_score,
+    int64_t pad_multiple,
+    bool include_debug_metadata
 ) {
     validate_route_inputs(x, topk_idx, topk_score);
+    TORCH_CHECK(pad_multiple > 0, "pad_multiple must be positive");
+    TORCH_CHECK(pad_multiple <= static_cast<int64_t>(std::numeric_limits<int32_t>::max()),
+        "pad_multiple is too large");
 
     const int64_t n_tokens = x.size(0);
-    const int64_t max_pool_routes = max_pool_routes_for_tokens(n_tokens);
+    const int64_t max_pool_routes = max_pool_routes_for_tokens(n_tokens, pad_multiple);
     const int64_t max_routes_per_expert = n_tokens * kTopK;
 
     auto int_opts = x.options().dtype(torch::kInt32);
@@ -3505,10 +3819,15 @@ RouteMetadata build_route_metadata(
     auto cursors = torch::empty({kNumExperts}, int_opts);
     auto offsets = torch::empty({kNumExperts + 1}, int_opts);
     auto route_pos = torch::empty({n_tokens, kTopK}, int_opts);
-    auto route_token = torch::empty({max_pool_routes}, int_opts);
-    auto route_slot = torch::empty({max_pool_routes}, int_opts);
+    torch::Tensor route_token;
+    torch::Tensor route_slot;
     auto x_route = torch::empty({max_pool_routes, kHiddenDim}, x.options());
-    auto route_score = torch::empty({max_pool_routes}, topk_score.options());
+    torch::Tensor route_score;
+    if (include_debug_metadata) {
+        route_token = torch::empty({max_pool_routes}, int_opts);
+        route_slot = torch::empty({max_pool_routes}, int_opts);
+        route_score = torch::empty({max_pool_routes}, topk_score.options());
+    }
 
     auto stream = at::cuda::getCurrentCUDAStream();
     C10_CUDA_CHECK(cudaMemsetAsync(counts.data_ptr<int32_t>(), 0, counts.numel() * sizeof(int32_t), stream.stream()));
@@ -3528,29 +3847,84 @@ RouteMetadata build_route_metadata(
     smoe_route_prefix_kernel<<<1, 1, 0, stream>>>(
         counts.data_ptr<int32_t>(),
         offsets.data_ptr<int32_t>(),
-        cursors.data_ptr<int32_t>()
+        cursors.data_ptr<int32_t>(),
+        static_cast<int32_t>(pad_multiple)
     );
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 
     if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kHalf) {
-        launch_route_pack<int64_t, c10::Half>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+        if (include_debug_metadata) {
+            launch_route_pack<int64_t, c10::Half, true>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else {
+            launch_route_pack<int64_t, c10::Half, false>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        }
     } else if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kFloat) {
-        launch_route_pack<int64_t, float>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+        if (include_debug_metadata) {
+            launch_route_pack<int64_t, float, true>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else {
+            launch_route_pack<int64_t, float, false>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        }
     } else if (topk_idx.scalar_type() == at::kInt && topk_score.scalar_type() == at::kHalf) {
-        launch_route_pack<int32_t, c10::Half>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+        if (include_debug_metadata) {
+            launch_route_pack<int32_t, c10::Half, true>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else {
+            launch_route_pack<int32_t, c10::Half, false>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        }
     } else {
-        launch_route_pack<int32_t, float>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+        if (include_debug_metadata) {
+            launch_route_pack<int32_t, float, true>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else {
+            launch_route_pack<int32_t, float, false>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        }
     }
 
     return {x_route, route_pos, route_token, route_slot, route_score, counts, offsets, max_routes_per_expert};
+}
+
+RouteMetadata build_route_metadata_forward_only(
+    torch::Tensor x,
+    torch::Tensor topk_idx,
+    torch::Tensor topk_score,
+    int64_t pad_multiple = kBlockM
+) {
+    return build_route_metadata_impl(x, topk_idx, topk_score, pad_multiple, false);
+}
+
+RouteMetadata build_route_metadata_debug(
+    torch::Tensor x,
+    torch::Tensor topk_idx,
+    torch::Tensor topk_score,
+    int64_t pad_multiple = kBlockM
+) {
+    return build_route_metadata_impl(x, topk_idx, topk_score, pad_multiple, true);
+}
+
+RouteMetadata build_route_metadata(
+    torch::Tensor x,
+    torch::Tensor topk_idx,
+    torch::Tensor topk_score,
+    int64_t pad_multiple = kBlockM
+) {
+    if (env_flag_enabled("USE_SMOE_FORWARD_ONLY_ROUTE_METADATA", true)) {
+        return build_route_metadata_forward_only(x, topk_idx, topk_score, pad_multiple);
+    }
+    return build_route_metadata_debug(x, topk_idx, topk_score, pad_multiple);
 }
 
 }  // namespace
@@ -3582,7 +3956,7 @@ std::vector<torch::Tensor> smoe_route_pack(
     torch::Tensor topk_idx,
     torch::Tensor topk_score
 ) {
-    auto meta = build_route_metadata(x, topk_idx, topk_score);
+    auto meta = build_route_metadata_debug(x, topk_idx, topk_score);
     return {
         meta.x_route,
         meta.route_pos,
@@ -3939,7 +4313,7 @@ torch::Tensor smoe_forward_m64(
     torch::Tensor topk_idx,
     torch::Tensor topk_score
 ) {
-    auto meta = build_route_metadata(x, topk_idx, topk_score);
+    auto meta = build_route_metadata(x, topk_idx, topk_score, kBlockM64);
 
     validate_fc1_inputs(meta.x_route, w1, b1, meta.counts, meta.offsets);
 
@@ -3994,7 +4368,7 @@ torch::Tensor smoe_forward_m64_with_residual(
     TORCH_CHECK(residual.dim() == 2 && residual.size(0) == x.size(0) && residual.size(1) == kHiddenDim,
         "residual must have shape [N,512]");
 
-    auto meta = build_route_metadata(x, topk_idx, topk_score);
+    auto meta = build_route_metadata(x, topk_idx, topk_score, kBlockM64);
 
     validate_fc1_inputs(meta.x_route, w1, b1, meta.counts, meta.offsets);
 
@@ -4117,6 +4491,122 @@ torch::Tensor smoe_forward_simple_w4a4_fc2_with_residual(
     auto out = torch::empty({x.size(0), kHiddenDim}, x.options());
 
     launch_grouped_linear_pack_simple_w4a4<kHiddenDim, kFfDim, true>(
+        meta.x_route,
+        w1,
+        b1,
+        meta.counts,
+        meta.offsets,
+        h_pack,
+        meta.max_routes_per_expert,
+        act_scale
+    );
+    launch_grouped_linear_simple_w4a4_packed_input<kFfDim, kHiddenDim, false>(
+        h_pack,
+        w2_pack,
+        b2,
+        meta.counts,
+        meta.offsets,
+        y_route,
+        meta.max_routes_per_expert,
+        act_scale,
+        weight_scale,
+        fc2_output_scale
+    );
+
+    if (x.size(0) == 0) {
+        return out;
+    }
+    if (topk_score.scalar_type() == at::kHalf) {
+        launch_route_reduce_with_residual<c10::Half>(
+            y_route, meta.route_pos, topk_score, residual, out, x.size(0));
+    } else {
+        launch_route_reduce_with_residual<float>(
+            y_route, meta.route_pos, topk_score, residual, out, x.size(0));
+    }
+    return out;
+}
+
+torch::Tensor smoe_forward_simple_w4a4_fc2_m64(
+    torch::Tensor x,
+    torch::Tensor w1,
+    torch::Tensor b1,
+    torch::Tensor w2_pack,
+    torch::Tensor b2,
+    torch::Tensor topk_idx,
+    torch::Tensor topk_score,
+    double act_scale,
+    double weight_scale,
+    double fc2_output_scale
+) {
+    auto meta = build_route_metadata(x, topk_idx, topk_score, kBlockM64);
+
+    validate_fc1_inputs(meta.x_route, w1, b1, meta.counts, meta.offsets);
+
+    auto h_pack = torch::empty({meta.x_route.size(0), kFfDim / 8}, x.options().dtype(torch::kInt32));
+    auto y_route = torch::empty({meta.x_route.size(0), kHiddenDim}, x.options());
+    auto out = torch::empty({x.size(0), kHiddenDim}, x.options());
+
+    launch_grouped_linear_pack_simple_w4a4_m64<kHiddenDim, kFfDim, true>(
+        meta.x_route,
+        w1,
+        b1,
+        meta.counts,
+        meta.offsets,
+        h_pack,
+        meta.max_routes_per_expert,
+        act_scale
+    );
+    launch_grouped_linear_simple_w4a4_packed_input<kFfDim, kHiddenDim, false>(
+        h_pack,
+        w2_pack,
+        b2,
+        meta.counts,
+        meta.offsets,
+        y_route,
+        meta.max_routes_per_expert,
+        act_scale,
+        weight_scale,
+        fc2_output_scale
+    );
+
+    if (x.size(0) == 0) {
+        return out;
+    }
+    if (topk_score.scalar_type() == at::kHalf) {
+        launch_route_reduce<c10::Half>(y_route, meta.route_pos, topk_score, out, x.size(0));
+    } else {
+        launch_route_reduce<float>(y_route, meta.route_pos, topk_score, out, x.size(0));
+    }
+    return out;
+}
+
+torch::Tensor smoe_forward_simple_w4a4_fc2_m64_with_residual(
+    torch::Tensor x,
+    torch::Tensor residual,
+    torch::Tensor w1,
+    torch::Tensor b1,
+    torch::Tensor w2_pack,
+    torch::Tensor b2,
+    torch::Tensor topk_idx,
+    torch::Tensor topk_score,
+    double act_scale,
+    double weight_scale,
+    double fc2_output_scale
+) {
+    check_half_cuda_contiguous(residual, "residual");
+    check_same_device(x, residual, "x", "residual");
+    TORCH_CHECK(residual.dim() == 2 && residual.size(0) == x.size(0) && residual.size(1) == kHiddenDim,
+        "residual must have shape [N,512]");
+
+    auto meta = build_route_metadata(x, topk_idx, topk_score, kBlockM64);
+
+    validate_fc1_inputs(meta.x_route, w1, b1, meta.counts, meta.offsets);
+
+    auto h_pack = torch::empty({meta.x_route.size(0), kFfDim / 8}, x.options().dtype(torch::kInt32));
+    auto y_route = torch::empty({meta.x_route.size(0), kHiddenDim}, x.options());
+    auto out = torch::empty({x.size(0), kHiddenDim}, x.options());
+
+    launch_grouped_linear_pack_simple_w4a4_m64<kHiddenDim, kFfDim, true>(
         meta.x_route,
         w1,
         b1,
@@ -4947,6 +5437,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "Routed sparse SMoE forward with simple uniform-scale W4A4 fc2");
     m.def("smoe_forward_simple_w4a4_fc2_with_residual", &smoe_forward_simple_w4a4_fc2_with_residual,
         "Routed sparse SMoE forward with simple uniform-scale W4A4 fc2 fused with residual add");
+    m.def("smoe_forward_simple_w4a4_fc2_m64", &smoe_forward_simple_w4a4_fc2_m64,
+        "Routed sparse SMoE M64 forward with simple uniform-scale W4A4 fc2");
+    m.def("smoe_forward_simple_w4a4_fc2_m64_with_residual", &smoe_forward_simple_w4a4_fc2_m64_with_residual,
+        "Routed sparse SMoE M64 forward with simple uniform-scale W4A4 fc2 fused with residual add");
     m.def("smoe_forward_simple_w4a4", &smoe_forward_simple_w4a4,
         "Routed sparse SMoE forward with simple uniform-scale W4A4 fc1/fc2");
     m.def("smoe_forward_simple_w4a4_with_residual", &smoe_forward_simple_w4a4_with_residual,
