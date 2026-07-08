@@ -1,8 +1,7 @@
 import math
 import argparse
+import importlib
 import os
-import shutil
-import stat
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -10,7 +9,9 @@ from collections import defaultdict
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_LIBRARIES = (SCRIPT_DIR / "libraries").resolve()
+PARENT_LIBRARIES = (SCRIPT_DIR.parent / "libraries").resolve()
 TORCH_EXTENSIONS_DIR = (SCRIPT_DIR / ".torch_extensions").resolve()
+CMAKE_EXTENSIONS_DIR = (SCRIPT_DIR / "cmake_extensions").resolve()
 
 
 def _env_positive_int(name, default):
@@ -73,6 +74,10 @@ if USE_SIMPLE_W4A4_FC1_SMOE and not USE_SIMPLE_W4A4_SMOE:
 
 if PROJECT_LIBRARIES.exists():
     sys.path.insert(0, str(PROJECT_LIBRARIES))
+if PARENT_LIBRARIES.exists():
+    sys.path.insert(0, str(PARENT_LIBRARIES))
+if CMAKE_EXTENSIONS_DIR.exists():
+    sys.path.insert(0, str(CMAKE_EXTENSIONS_DIR))
 
 os.environ.setdefault("TORCH_EXTENSIONS_DIR", str(TORCH_EXTENSIONS_DIR))
 
@@ -81,7 +86,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.cpp_extension import load
 from tqdm import tqdm
 
 
@@ -96,59 +100,20 @@ _OUTPUT_EXT = None
 _ACTIVE_CUDA_GRAPH_RUNNER = None
 
 
-def _configure_ninja():
-    if shutil.which("ninja") is not None:
-        return
-
-    candidates = [
-        PROJECT_LIBRARIES / "bin" / "ninja",
-        PROJECT_LIBRARIES / "ninja" / "data" / "bin" / "ninja",
-    ]
-
+def _load_prebuilt_cuda_ext(name):
+    if os.environ.get("USE_PREBUILT_CUDA_EXT", "1") == "0":
+        raise RuntimeError("USE_PREBUILT_CUDA_EXT=0 is not supported; run build_env.sh first")
+    if CMAKE_EXTENSIONS_DIR.exists():
+        path = str(CMAKE_EXTENSIONS_DIR)
+        if path not in sys.path:
+            sys.path.insert(0, path)
     try:
-        import ninja
-        bin_dir = getattr(ninja, "BIN_DIR", None)
-        if bin_dir is not None:
-            candidates.append(Path(bin_dir) / "ninja")
-    except ImportError:
-        pass
-
-    if PROJECT_LIBRARIES.exists():
-        candidates.extend(path for path in PROJECT_LIBRARIES.rglob("ninja") if path.is_file())
-
-    seen = set()
-    for candidate in candidates:
-        candidate = candidate.resolve()
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-
-        if candidate.exists():
-            mode = candidate.stat().st_mode
-            if not mode & stat.S_IXUSR:
-                candidate.chmod(mode | stat.S_IXUSR)
-            os.environ["PATH"] = str(candidate.parent) + os.pathsep + os.environ.get("PATH", "")
-            if shutil.which("ninja") is not None:
-                print(f"[INFO] using local ninja: {candidate}")
-                return
-
-    raise RuntimeError(
-        "Ninja is required to build the custom CUDA LayerNorm extension. "
-        "Install it with: python -m pip install --target ./libraries --upgrade ninja"
-    )
-
-
-def _configure_cuda_arch():
-    if "TORCH_CUDA_ARCH_LIST" in os.environ or not torch.cuda.is_available():
-        return
-
-    major, minor = torch.cuda.get_device_capability()
-    os.environ["TORCH_CUDA_ARCH_LIST"] = f"{major}.{minor}"
-    print(f"[INFO] using TORCH_CUDA_ARCH_LIST={os.environ['TORCH_CUDA_ARCH_LIST']}")
-
-
-def _cuda_ext_verbose():
-    return os.environ.get("CUDA_EXT_VERBOSE", "0") != "0"
+        return importlib.import_module(name)
+    except ImportError as exc:
+        raise RuntimeError(
+            f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}; "
+            "run build_env.sh before infer.py"
+        ) from exc
 
 
 def _attention_tiled_cuda_flags():
@@ -416,17 +381,7 @@ def _get_layernorm_ext():
     if _LAYER_NORM_EXT is not None:
         return _LAYER_NORM_EXT
 
-    cuda_src = _resolve_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _LAYER_NORM_EXT = load(
-        name="layernorm_512_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
+    _LAYER_NORM_EXT = _load_prebuilt_cuda_ext("layernorm_512_ext")
     return _LAYER_NORM_EXT
 
 
@@ -435,17 +390,7 @@ def _get_attention_ext():
     if _ATTENTION_EXT is not None:
         return _ATTENTION_EXT
 
-    cuda_src = _resolve_attention_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _ATTENTION_EXT = load(
-        name="varlen_attention_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"] + _attention_tiled_cuda_flags(),
-        verbose=_cuda_ext_verbose(),
-    )
+    _ATTENTION_EXT = _load_prebuilt_cuda_ext("varlen_attention_ext")
     return _ATTENTION_EXT
 
 
@@ -454,18 +399,7 @@ def _get_routed_smoe_ext():
     if _ROUTED_SMOE_EXT is not None:
         return _ROUTED_SMOE_EXT
 
-    cuda_src = _resolve_routed_smoe_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _ROUTED_SMOE_EXT = load(
-        name="routed_smoe_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"] + _routed_smoe_cuda_flags(),
-        extra_include_paths=_cutlass_include_paths(),
-        verbose=_cuda_ext_verbose(),
-    )
+    _ROUTED_SMOE_EXT = _load_prebuilt_cuda_ext("routed_smoe_ext")
     return _ROUTED_SMOE_EXT
 
 
@@ -474,17 +408,7 @@ def _get_embedding_bag_ext():
     if _EMBEDDING_BAG_EXT is not None:
         return _EMBEDDING_BAG_EXT
 
-    cuda_src = _resolve_embedding_bag_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _EMBEDDING_BAG_EXT = load(
-        name="embedding_bag_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
+    _EMBEDDING_BAG_EXT = _load_prebuilt_cuda_ext("embedding_bag_ext")
     return _EMBEDDING_BAG_EXT
 
 
@@ -493,17 +417,7 @@ def _get_gate_topk_ext():
     if _GATE_TOPK_EXT is not None:
         return _GATE_TOPK_EXT
 
-    cuda_src = _resolve_gate_topk_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _GATE_TOPK_EXT = load(
-        name="gate_topk_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
+    _GATE_TOPK_EXT = _load_prebuilt_cuda_ext("gate_topk_ext")
     return _GATE_TOPK_EXT
 
 
@@ -512,17 +426,7 @@ def _get_output_ext():
     if _OUTPUT_EXT is not None:
         return _OUTPUT_EXT
 
-    cuda_src = _resolve_output_cuda_src()
-
-    _configure_ninja()
-    _configure_cuda_arch()
-    _OUTPUT_EXT = load(
-        name="output_ext",
-        sources=[str(cuda_src)],
-        extra_cflags=["-O3"],
-        extra_cuda_cflags=["-O3"],
-        verbose=_cuda_ext_verbose(),
-    )
+    _OUTPUT_EXT = _load_prebuilt_cuda_ext("output_ext")
     return _OUTPUT_EXT
 
 
@@ -3444,34 +3348,10 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint 文件路径，默认使用同目录下的 ckpt.pt')
-    parser.add_argument('--debug-w4a16-bfrag', action='store_true',
-                        help='run W4A16 B-fragment ldmatrix/direct-dequant diagnostic and exit')
-    parser.add_argument('--debug-w4a16-bfrag-layer', type=str, default='both',
-                        choices=('fc1', 'fc2', 'both'),
-                        help='which SMoE W4A16 weight shape to diagnose')
-    parser.add_argument('--debug-w4a16-bfrag-expert', type=int, default=0,
-                        help='expert id for the debug tile')
-    parser.add_argument('--debug-w4a16-bfrag-n-tile', type=int, default=0,
-                        help='output tile base N, must be a multiple of 128')
-    parser.add_argument('--debug-w4a16-bfrag-k-base', type=int, default=0,
-                        help='K tile base, must be a multiple of 16')
-    parser.add_argument('--debug-w4a16-bfrag-limit', type=int, default=16,
-                        help='maximum number of mismatched lane records to print per layer')
-    parser.add_argument('--debug-w4a16-forward', action='store_true',
-                        help='run deterministic W4A16 forward diagnostic and exit')
-    parser.add_argument('--debug-w4a16-forward-tokens', type=int, default=640,
-                        help='token count for W4A16 forward diagnostic')
-    parser.add_argument('--debug-w4a16-forward-seed', type=int, default=20250218,
-                        help='random seed for W4A16 forward diagnostic')
     args = parser.parse_args()
 
-    if args.debug_w4a16_bfrag:
-        return _run_debug_w4a16_bfrag(args)
-    if args.debug_w4a16_forward:
-        return _run_debug_w4a16_forward(args)
-
     cur_path = Path(__file__).parent.absolute()
-    ref_dir = cur_path /'code'/ 'dataset'
+    ref_dir = cur_path / 'dataset'
     history_dir = ref_dir / 'history'
     input_file = ref_dir / 'test.csv'
     output_file = Path('predict.txt')
@@ -3552,6 +3432,7 @@ def main():
     print('[INFO] data loading done')
 
     # ----- 加载模型 -----
+
     model, dev = load_model(ckpt_path=args.ckpt)
 
     # ----- 推理 -----
@@ -3561,6 +3442,7 @@ def main():
     time_sum = 0.0
 
     t_start = time.time()
+
     with torch.no_grad():
         for batch in tqdm(all_batches, desc="Inference"):
             batch = move_batch_to_device(batch, dev)
@@ -3574,6 +3456,7 @@ def main():
             masked_probs = probs[pred_mask].cpu().tolist()
             all_logids.extend(masked_logids)
             all_probs.extend(masked_probs)
+
     time_sum += time.time() - t_start
 
     print(f'[INFO] inference time: {round(time_sum, 4)}s')
