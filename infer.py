@@ -60,7 +60,8 @@ PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") != "0"
-USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "0") != "0"
+USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "1") != "0"
+USE_CUDA_GRAPH_STATIC_PREFETCH = os.environ.get("USE_CUDA_GRAPH_STATIC_PREFETCH", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -932,11 +933,20 @@ def _install_judge_move_prefetcher(device):
         _ACTIVE_JUDGE_BATCH_PREFETCHER = None
         return False
 
+    all_batches = _find_caller_all_batches()
+    if (
+        USE_CUDA_GRAPH_STATIC_PREFETCH
+        and USE_CUDA_GRAPH_PRELOAD_IN_MOVE
+        and _ACTIVE_CUDA_GRAPH_RUNNER is not None
+        and _looks_like_inference_batches(all_batches)
+    ):
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+        return _ACTIVE_CUDA_GRAPH_RUNNER.enable_graph_prefetch(all_batches)
+
     if USE_CUDA_GRAPH_PRELOAD_IN_MOVE and _ACTIVE_CUDA_GRAPH_RUNNER is not None:
         _ACTIVE_JUDGE_BATCH_PREFETCHER = None
         return False
 
-    all_batches = _find_caller_all_batches()
     if not _looks_like_inference_batches(all_batches):
         _ACTIVE_JUDGE_BATCH_PREFETCHER = None
         return False
@@ -3136,6 +3146,11 @@ class CudaGraphBatchRunner:
         self.token_bucket = int(token_bucket)
         self.runners = {}
         self._fallback_warned = False
+        self._graph_prefetch_enabled = False
+        self._graph_prefetch_copy_stream = None
+        self._graph_prefetch_all_batches = None
+        self._graph_prefetch_batch_ids = {}
+        self._graph_prefetched = {}
 
         specs = _build_cuda_graph_specs(all_batches, self.token_bucket)
         if not specs:
@@ -3276,6 +3291,57 @@ class CudaGraphBatchRunner:
         pass
         return runner
 
+    def enable_graph_prefetch(self, all_batches):
+        if not _looks_like_inference_batches(all_batches):
+            self._graph_prefetch_enabled = False
+            return False
+
+        self._graph_prefetch_copy_stream = torch.cuda.Stream(device=self.device)
+        self._graph_prefetch_all_batches = all_batches
+        self._graph_prefetch_batch_ids = {
+            id(batch): idx for idx, batch in enumerate(all_batches)
+        }
+        self._graph_prefetched = {}
+        self._graph_prefetch_enabled = True
+        return True
+
+    def _schedule_graph_prefetch(self, idx):
+        if (
+            not self._graph_prefetch_enabled
+            or self._graph_prefetch_all_batches is None
+            or idx < 0
+            or idx >= len(self._graph_prefetch_all_batches)
+            or idx in self._graph_prefetched
+        ):
+            return
+
+        batch = self._graph_prefetch_all_batches[idx]
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            return
+
+        with torch.cuda.stream(self._graph_prefetch_copy_stream):
+            self._graph_prefetch_copy_stream.wait_stream(torch.cuda.current_stream(self.device))
+            self._copy_batch_to_static(runner, batch)
+        self._graph_prefetched[idx] = (runner, tokens)
+
+    def _make_staged_batch(self, runner, tokens, source_batch=None, batch_idx=None):
+        static_batch = runner["batch"]
+        if self._graph_prefetch_enabled and source_batch is not None:
+            logid = source_batch["logid"].to(self.device, non_blocking=True)
+            pred_mask = source_batch["pred_mask"].to(self.device, non_blocking=True)
+        else:
+            logid = static_batch["logid"][:tokens]
+            pred_mask = static_batch["pred_mask"][:tokens]
+        return {
+            "logid": logid,
+            "pred_mask": pred_mask,
+            "_cuda_graph_owner": self,
+            "_cuda_graph_staged_runner": runner,
+            "_cuda_graph_tokens": tokens,
+            "_cuda_graph_batch_idx": batch_idx,
+        }
+
     def replay(self, batch):
         runner, tokens = self._lookup_runner(batch)
         if not self._batch_fits_runner(runner, batch):
@@ -3293,19 +3359,25 @@ class CudaGraphBatchRunner:
         ):
             return None
 
-        runner, tokens = self._lookup_runner(batch)
-        if not self._batch_fits_runner(runner, batch):
-            return None
+        batch_idx = self._graph_prefetch_batch_ids.get(id(batch), None)
+        if self._graph_prefetch_enabled and batch_idx is not None:
+            prefetched = self._graph_prefetched.pop(batch_idx, None)
+            if prefetched is not None:
+                torch.cuda.current_stream(self.device).wait_stream(self._graph_prefetch_copy_stream)
+                runner, tokens = prefetched
+            else:
+                runner, tokens = self._lookup_runner(batch)
+                if not self._batch_fits_runner(runner, batch):
+                    return None
+                self._copy_batch_to_static(runner, batch)
+        else:
+            runner, tokens = self._lookup_runner(batch)
+            if not self._batch_fits_runner(runner, batch):
+                return None
 
-        self._copy_batch_to_static(runner, batch)
-        static_batch = runner["batch"]
-        return {
-            "logid": static_batch["logid"][:tokens],
-            "pred_mask": static_batch["pred_mask"][:tokens],
-            "_cuda_graph_owner": self,
-            "_cuda_graph_staged_runner": runner,
-            "_cuda_graph_tokens": tokens,
-        }
+            self._copy_batch_to_static(runner, batch)
+
+        return self._make_staged_batch(runner, tokens, source_batch=batch, batch_idx=batch_idx)
 
     def replay_logits_or_none(self, batch):
         if isinstance(batch, dict) and batch.get("_cuda_graph_owner") is self:
@@ -3313,6 +3385,9 @@ class CudaGraphBatchRunner:
             tokens = int(batch.get("_cuda_graph_tokens", 0))
             if runner is not None and tokens > 0:
                 runner["graph"].replay()
+                batch_idx = batch.get("_cuda_graph_batch_idx")
+                if self._graph_prefetch_enabled and batch_idx is not None:
+                    self._schedule_graph_prefetch(int(batch_idx) + 1)
                 logits = runner["logits"]
                 if logits.size(0) != tokens:
                     logits = logits[:tokens]

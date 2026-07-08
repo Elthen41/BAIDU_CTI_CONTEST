@@ -40,7 +40,8 @@
 | embedding len 0/1/2 fast path | `CUDA/embedding_bag_kernels.cu` | `24s -> 25s` | 负优化，已回退。 |
 | SMoE pooled-M scheduler | `CUDA/smoe_kernels.cu` | `43s -> 52s` | 负优化，已回退到旧 `(expert, m_block)` scheduler。 |
 | CUDA dense-all SMoE 替代 PyTorch dense-all | `CUDA/dense_all_smoe_kernels.cu` | 不如 PyTorch dense-all | `infer.py` 接入已移除；主路径改用 routed sparse。 |
-| `move_batch_to_device()` API prefetch | `infer.py` | `13.4054s -> 16.1399s / 16.5082s` | 正确率不变但变慢；旧实现会在 `load_model()` 里预取 batch 0，且和 CUDA Graph preload 叠加成 CPU pinned batch -> prefetched GPU batch -> graph static GPU batch。已改成 lazy，并在 graph preload 活跃时禁用。 |
+| `move_batch_to_device()` API prefetch | `infer.py` | `13.4054s -> 16.1399s / 16.5082s` | 正确率不变但变慢；旧实现会在 `load_model()` 里预取 batch 0，且和 CUDA Graph preload 叠加成 CPU pinned batch -> prefetched GPU batch -> graph static GPU batch。默认不用于 graph path。 |
+| CUDA Graph static prefetch | `infer.py` | 未记录有效成绩 | 双 buffer 版本会为每个 bucket 捕获第二套 graph，A800 setup 超时且显存约 49.5GB；轻量单 buffer 版本避免显存膨胀但仍未能稳定进入计时 loop。保留在 `USE_CUDA_GRAPH_STATIC_PREFETCH=1` 实验开关后，不进入默认路径。 |
 
 ## 2026-07-06 W4A4 SMoE 实验
 
