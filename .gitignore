@@ -19,4 +19,6 @@ ckpt.part.07
 ckpt.part.08
 ckpt.part.09
 .torch_extensions/
+build/
+cmake_extensions/
 __pycache__/

@@ -1,6 +1,6 @@
 # BAIDU_CTI
 
-本仓库定位为 CTR 推理任务的高性能 CUDA 算子优化工程。核心目标是在保持模型行为一致的前提下，将 PyTorch 中开销较高、形状相对固定的推理路径逐步替换为自定义 CUDA kernel，并通过 `ninja` 与 `pybind11` 编译成 PyTorch extension 接入 `infer.py`。
+本仓库定位为 CTR 推理任务的高性能 CUDA 算子优化工程。核心目标是在保持模型行为一致的前提下，将 PyTorch 中开销较高、形状相对固定的推理路径逐步替换为自定义 CUDA kernel，并通过 `build_env.sh` 中的 CMake 构建为 PyTorch extension 接入 `infer.py`。
 
 当前主要面向最终 A800 测试环境，默认以 fp16 推理为优化基准：
 

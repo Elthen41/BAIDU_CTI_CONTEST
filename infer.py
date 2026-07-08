@@ -1,5 +1,6 @@
 import math
 import argparse
+import importlib
 import os
 import shutil
 import stat
@@ -11,6 +12,7 @@ from collections import defaultdict
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_LIBRARIES = (SCRIPT_DIR / "libraries").resolve()
 TORCH_EXTENSIONS_DIR = (SCRIPT_DIR / ".torch_extensions").resolve()
+CMAKE_EXTENSIONS_DIR = (SCRIPT_DIR / "cmake_extensions").resolve()
 
 
 def _env_positive_int(name, default):
@@ -69,6 +71,8 @@ if USE_SIMPLE_W4A4_FC1_SMOE and not USE_SIMPLE_W4A4_SMOE:
 
 if PROJECT_LIBRARIES.exists():
     sys.path.insert(0, str(PROJECT_LIBRARIES))
+if CMAKE_EXTENSIONS_DIR.exists():
+    sys.path.insert(0, str(CMAKE_EXTENSIONS_DIR))
 
 os.environ.setdefault("TORCH_EXTENSIONS_DIR", str(TORCH_EXTENSIONS_DIR))
 
@@ -89,6 +93,25 @@ _ROUTED_SMOE_EXT = None
 _EMBEDDING_BAG_EXT = None
 _GATE_TOPK_EXT = None
 _OUTPUT_EXT = None
+
+
+def _load_prebuilt_cuda_ext(name):
+    if os.environ.get("USE_PREBUILT_CUDA_EXT", "1") == "0":
+        return None
+    if CMAKE_EXTENSIONS_DIR.exists():
+        path = str(CMAKE_EXTENSIONS_DIR)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        if os.environ.get("REQUIRE_PREBUILT_CUDA_EXT", "0") == "1":
+            raise RuntimeError(
+                f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}"
+            ) from exc
+        if os.environ.get("CUDA_EXT_VERBOSE", "0") != "0":
+            print(f"[INFO] prebuilt CUDA extension {name!r} unavailable, falling back to JIT build: {exc}")
+        return None
 
 
 def _configure_ninja():
@@ -411,6 +434,10 @@ def _get_layernorm_ext():
     if _LAYER_NORM_EXT is not None:
         return _LAYER_NORM_EXT
 
+    _LAYER_NORM_EXT = _load_prebuilt_cuda_ext("layernorm_512_ext")
+    if _LAYER_NORM_EXT is not None:
+        return _LAYER_NORM_EXT
+
     cuda_src = _resolve_cuda_src()
 
     _configure_ninja()
@@ -430,6 +457,10 @@ def _get_attention_ext():
     if _ATTENTION_EXT is not None:
         return _ATTENTION_EXT
 
+    _ATTENTION_EXT = _load_prebuilt_cuda_ext("varlen_attention_ext")
+    if _ATTENTION_EXT is not None:
+        return _ATTENTION_EXT
+
     cuda_src = _resolve_attention_cuda_src()
 
     _configure_ninja()
@@ -446,6 +477,10 @@ def _get_attention_ext():
 
 def _get_routed_smoe_ext():
     global _ROUTED_SMOE_EXT
+    if _ROUTED_SMOE_EXT is not None:
+        return _ROUTED_SMOE_EXT
+
+    _ROUTED_SMOE_EXT = _load_prebuilt_cuda_ext("routed_smoe_ext")
     if _ROUTED_SMOE_EXT is not None:
         return _ROUTED_SMOE_EXT
 
@@ -469,6 +504,10 @@ def _get_embedding_bag_ext():
     if _EMBEDDING_BAG_EXT is not None:
         return _EMBEDDING_BAG_EXT
 
+    _EMBEDDING_BAG_EXT = _load_prebuilt_cuda_ext("embedding_bag_ext")
+    if _EMBEDDING_BAG_EXT is not None:
+        return _EMBEDDING_BAG_EXT
+
     cuda_src = _resolve_embedding_bag_cuda_src()
 
     _configure_ninja()
@@ -488,6 +527,10 @@ def _get_gate_topk_ext():
     if _GATE_TOPK_EXT is not None:
         return _GATE_TOPK_EXT
 
+    _GATE_TOPK_EXT = _load_prebuilt_cuda_ext("gate_topk_ext")
+    if _GATE_TOPK_EXT is not None:
+        return _GATE_TOPK_EXT
+
     cuda_src = _resolve_gate_topk_cuda_src()
 
     _configure_ninja()
@@ -504,6 +547,10 @@ def _get_gate_topk_ext():
 
 def _get_output_ext():
     global _OUTPUT_EXT
+    if _OUTPUT_EXT is not None:
+        return _OUTPUT_EXT
+
+    _OUTPUT_EXT = _load_prebuilt_cuda_ext("output_ext")
     if _OUTPUT_EXT is not None:
         return _OUTPUT_EXT
 
