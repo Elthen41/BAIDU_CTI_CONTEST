@@ -89,3 +89,6 @@ ssh ubuntu@101.42.65.198
 ssh -p 60022 aistudio@101.42.65.198
 # passwd: 你的mini_sshd密码
 ```
+
+> The "你的mini_sshd密码" is not a placeholder, it is the password literal string.
+> My workspace: /home/aistudio/liaoziwen
