@@ -48,6 +48,7 @@ USE_M64_SMOE = os.environ.get("USE_M64_SMOE", "0") != "0"
 USE_CUTLASS_SMOE = os.environ.get("USE_CUTLASS_SMOE", "0") != "0"
 USE_SIMPLE_W4A4_SMOE = os.environ.get("USE_SIMPLE_W4A4_SMOE", "1") != "0"
 USE_SIMPLE_W4A4_FC1_SMOE = os.environ.get("USE_SIMPLE_W4A4_FC1_SMOE", "0") != "0"
+USE_SIMPLE_W4A4_FC1_PACK_OUTPUT = os.environ.get("USE_SIMPLE_W4A4_FC1_PACK_OUTPUT", "1") != "0"
 USE_W4A16_SMOE = os.environ.get("USE_W4A16_SMOE", "0") != "0"
 USE_CUDA_W4A16_SMOE = os.environ.get("USE_CUDA_W4A16_SMOE", "1") != "0"
 USE_FRAG_DEQUANT_W4A16_SMOE = os.environ.get("USE_FRAG_DEQUANT_W4A16_SMOE", "0") != "0"
@@ -1755,8 +1756,9 @@ class SMoE(nn.Module):
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe"):
                 print(
-                    "[INFO] SMoE using simple CUDA W4A4 fc2 path "
+                    "[INFO] SMoE using simple CUDA W4A4 path "
                     f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+                    f"fc1_pack_output={USE_SIMPLE_W4A4_FC1_PACK_OUTPUT}, "
                     f"m64={USE_M64_SMOE}, "
                     f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
                     f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
@@ -1828,8 +1830,9 @@ class SMoE(nn.Module):
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe_residual"):
                 print(
-                    "[INFO] SMoE using simple CUDA W4A4 fc2 path with residual add "
+                    "[INFO] SMoE using simple CUDA W4A4 path with residual add "
                     f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+                    f"fc1_pack_output={USE_SIMPLE_W4A4_FC1_PACK_OUTPUT}, "
                     f"m64={USE_M64_SMOE}, "
                     f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
                     f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
@@ -2412,8 +2415,9 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
             )
     torch.cuda.synchronize(dev)
     print(
-        "[INFO] Loaded SMoE simple W4A4 fc2 extension "
+        "[INFO] Loaded SMoE simple W4A4 extension "
         f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+        f"fc1_pack_output={USE_SIMPLE_W4A4_FC1_PACK_OUTPUT}, "
         f"m64={USE_M64_SMOE}, "
         f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
         f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
@@ -3038,8 +3042,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
     if USE_SIMPLE_W4A4_SMOE:
         model.seq_encoder.prepare_simple_w4a4_smoe()
         print(
-            "[INFO] Prepared SMoE simple W4A4 fc2 packed weights "
+            "[INFO] Prepared SMoE simple W4A4 packed weights "
             f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+            f"fc1_pack_output={USE_SIMPLE_W4A4_FC1_PACK_OUTPUT}, "
             f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
             f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
             f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
@@ -3090,8 +3095,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
             print("[INFO] Using custom CUDA varlen causal attention")
     if USE_SIMPLE_W4A4_SMOE:
         print(
-            "[INFO] Using SMoE simple CUDA W4A4 fc2 experiment "
+            "[INFO] Using SMoE simple CUDA W4A4 experiment "
             f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
+            f"fc1_pack_output={USE_SIMPLE_W4A4_FC1_PACK_OUTPUT}, "
             f"m64={USE_M64_SMOE}, "
             f"forward_only_route_meta={USE_SMOE_FORWARD_ONLY_ROUTE_METADATA}, "
             f"route_pack_4routes={USE_SMOE_ROUTE_PACK_4ROUTES}, "

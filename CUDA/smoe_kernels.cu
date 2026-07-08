@@ -3187,6 +3187,132 @@ __global__ void smoe_grouped_linear_simple_w4a4_kernel(
 #endif
 }
 
+template <int InDim, int OutDim, bool ApplyRelu>
+__global__ void smoe_grouped_linear_simple_w4a4_pack_output_kernel(
+    const int32_t* __restrict__ a_pack,
+    const int32_t* __restrict__ w_pack,
+    const __half* __restrict__ bias,
+    const int32_t* __restrict__ counts,
+    const int32_t* __restrict__ offsets,
+    int32_t* __restrict__ output_pack,
+    int total_rows,
+    float out_scale,
+    float output_scale,
+    float inv_next_act_scale
+) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 750)
+    using namespace nvcuda;
+    constexpr int kInputPacksPerRow = InDim / 8;
+    constexpr int kOutputPacksPerRow = OutDim / 8;
+    using FragA = wmma::fragment<
+        wmma::matrix_a,
+        8,
+        8,
+        32,
+        wmma::experimental::precision::s4,
+        wmma::row_major>;
+    using FragB = wmma::fragment<
+        wmma::matrix_b,
+        8,
+        8,
+        32,
+        wmma::experimental::precision::s4,
+        wmma::col_major>;
+    using FragC = wmma::fragment<wmma::accumulator, 8, 8, 32, int>;
+
+    const int lane = threadIdx.x & 31;
+    const int warp_id = threadIdx.x >> 5;
+    const int warp_row_tile = warp_id >> 2;
+    const int warp_col_pair = warp_id & 3;
+    const int row_base = blockIdx.y * kSimpleW4A4CtaM + warp_row_tile * 8;
+    const int col_base = blockIdx.x * kSimpleW4A4CtaN
+        + warp_col_pair * (8 * kSimpleW4A4WarpNFragments);
+    if (row_base >= total_rows || col_base >= OutDim) {
+        return;
+    }
+
+    const int expert = find_expert_for_pool_m(offsets, row_base);
+    if (expert >= kNumExperts) {
+        return;
+    }
+    const int local_base = row_base - offsets[expert];
+    if (local_base >= counts[expert]) {
+        return;
+    }
+
+    FragC acc0;
+    FragC acc1;
+    FragC acc2;
+    FragC acc3;
+    wmma::fill_fragment(acc0, 0);
+    wmma::fill_fragment(acc1, 0);
+    wmma::fill_fragment(acc2, 0);
+    wmma::fill_fragment(acc3, 0);
+#pragma unroll
+    for (int k = 0; k < InDim; k += 32) {
+        FragA a_frag;
+        FragB b_frag0;
+        FragB b_frag1;
+        FragB b_frag2;
+        FragB b_frag3;
+        const void* a_ptr = static_cast<const void*>(
+            a_pack + row_base * kInputPacksPerRow + (k / 8));
+        const void* b_ptr0 = static_cast<const void*>(
+            w_pack + (expert * OutDim + col_base) * kInputPacksPerRow + (k / 8));
+        const void* b_ptr1 = static_cast<const void*>(
+            w_pack + (expert * OutDim + col_base + 8) * kInputPacksPerRow + (k / 8));
+        const void* b_ptr2 = static_cast<const void*>(
+            w_pack + (expert * OutDim + col_base + 16) * kInputPacksPerRow + (k / 8));
+        const void* b_ptr3 = static_cast<const void*>(
+            w_pack + (expert * OutDim + col_base + 24) * kInputPacksPerRow + (k / 8));
+        wmma::load_matrix_sync(a_frag, a_ptr, InDim);
+        wmma::load_matrix_sync(b_frag0, b_ptr0, InDim);
+        wmma::load_matrix_sync(b_frag1, b_ptr1, InDim);
+        wmma::load_matrix_sync(b_frag2, b_ptr2, InDim);
+        wmma::load_matrix_sync(b_frag3, b_ptr3, InDim);
+        wmma::mma_sync(acc0, a_frag, b_frag0, acc0, false);
+        wmma::mma_sync(acc1, a_frag, b_frag1, acc1, false);
+        wmma::mma_sync(acc2, a_frag, b_frag2, acc2, false);
+        wmma::mma_sync(acc3, a_frag, b_frag3, acc3, false);
+    }
+
+    __shared__ int acc_tile[kSimpleW4A4WarpsPerCta][kSimpleW4A4WarpNFragments][8 * 8];
+    wmma::store_matrix_sync(acc_tile[warp_id][0], acc0, 8, wmma::mem_row_major);
+    wmma::store_matrix_sync(acc_tile[warp_id][1], acc1, 8, wmma::mem_row_major);
+    wmma::store_matrix_sync(acc_tile[warp_id][2], acc2, 8, wmma::mem_row_major);
+    wmma::store_matrix_sync(acc_tile[warp_id][3], acc3, 8, wmma::mem_row_major);
+    __syncwarp();
+
+#pragma unroll
+    for (int frag_n = 0; frag_n < kSimpleW4A4WarpNFragments; ++frag_n) {
+        if (lane < 8) {
+            const int local_row = lane;
+            const int row = row_base + local_row;
+            const int expert_local_row = local_base + local_row;
+            const int col0 = col_base + frag_n * 8;
+            if (row < total_rows && col0 < OutDim && expert_local_row < counts[expert]) {
+                uint32_t word = 0;
+#pragma unroll
+                for (int local_col = 0; local_col < 8; ++local_col) {
+                    const int col = col0 + local_col;
+                    float value = static_cast<float>(
+                        acc_tile[warp_id][frag_n][local_row * 8 + local_col]) * out_scale;
+                    value += __half2float(bias[expert * OutDim + col]);
+                    if constexpr (ApplyRelu) {
+                        value = value > 0.0f ? value : 0.0f;
+                    }
+                    value *= output_scale;
+                    int q = __float2int_rn(__half2float(__float2half_rn(value)) * inv_next_act_scale);
+                    q = max(-8, min(7, q));
+                    word |= (static_cast<uint32_t>(q) & 0xFu) << (4 * local_col);
+                }
+                output_pack[row * kOutputPacksPerRow + col0 / 8] = static_cast<int32_t>(word);
+            }
+        }
+    }
+#endif
+}
+
 template <int InDim, int OutDim>
 void validate_simple_w4a4_linear_inputs(
     const torch::Tensor& input,
@@ -3356,6 +3482,77 @@ void launch_grouped_linear_simple_w4a4(
         weight_scale,
         output_scale
     );
+}
+
+template <int InDim, int OutDim, bool ApplyRelu>
+void launch_grouped_linear_simple_w4a4_pack_output(
+    const torch::Tensor& input,
+    const torch::Tensor& weight_pack,
+    const torch::Tensor& bias,
+    const torch::Tensor& counts,
+    const torch::Tensor& offsets,
+    torch::Tensor& output_pack,
+    int64_t max_routes_per_expert,
+    double act_scale,
+    double weight_scale,
+    double output_scale,
+    double next_act_scale
+) {
+    if (max_routes_per_expert == 0 || input.size(0) == 0) {
+        return;
+    }
+    validate_simple_w4a4_linear_inputs<InDim, OutDim>(input, weight_pack, bias, counts, offsets);
+    check_i32_cuda_contiguous(output_pack, "output_pack");
+    check_same_device(input, output_pack, "input", "output_pack");
+    TORCH_CHECK(output_pack.dim() == 2 && output_pack.size(0) == input.size(0)
+        && output_pack.size(1) == OutDim / 8, "simple W4A4 output_pack has wrong shape");
+    TORCH_CHECK(act_scale > 0.0, "simple W4A4 act_scale must be positive");
+    TORCH_CHECK(weight_scale > 0.0, "simple W4A4 weight_scale must be positive");
+    TORCH_CHECK(output_scale > 0.0, "simple W4A4 output_scale must be positive");
+    TORCH_CHECK(next_act_scale > 0.0, "simple W4A4 next_act_scale must be positive");
+    TORCH_CHECK(ceil_div_int64(input.size(0), kSimpleW4A4CtaM) <= 65535,
+        "route pool creates too many CTA rows for simple W4A4 pack output");
+
+    constexpr int kPacksPerRow = InDim / 8;
+    auto pack_options = input.options().dtype(torch::kInt32);
+    auto a_pack = torch::empty({input.size(0), kPacksPerRow}, pack_options);
+    const float inv_act_scale = 1.0f / static_cast<float>(act_scale);
+    smoe_simple_w4a4_pack_activation_kernel<InDim>
+        <<<
+            static_cast<unsigned int>(ceil_div_int64(input.size(0), kSimpleW4A4PackRowsPerCta)),
+            kSimpleW4A4PackRowsPerCta * kPacksPerRow,
+            0,
+            at::cuda::getCurrentCUDAStream()
+        >>>(
+            reinterpret_cast<const __half*>(input.data_ptr<c10::Half>()),
+            a_pack.data_ptr<int32_t>(),
+            counts.data_ptr<int32_t>(),
+            offsets.data_ptr<int32_t>(),
+            static_cast<int>(input.size(0)),
+            inv_act_scale
+    );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+    const dim3 block(kSimpleW4A4WarpsPerCta * kWarpSize);
+    const dim3 grid(
+        static_cast<unsigned int>(ceil_div_int64(OutDim, kSimpleW4A4CtaN)),
+        static_cast<unsigned int>(ceil_div_int64(input.size(0), kSimpleW4A4CtaM)),
+        1
+    );
+    smoe_grouped_linear_simple_w4a4_pack_output_kernel<InDim, OutDim, ApplyRelu>
+        <<<grid, block, 0, at::cuda::getCurrentCUDAStream()>>>(
+            a_pack.data_ptr<int32_t>(),
+            weight_pack.data_ptr<int32_t>(),
+            reinterpret_cast<const __half*>(bias.data_ptr<c10::Half>()),
+            counts.data_ptr<int32_t>(),
+            offsets.data_ptr<int32_t>(),
+            output_pack.data_ptr<int32_t>(),
+            static_cast<int>(input.size(0)),
+            static_cast<float>(act_scale * weight_scale),
+            static_cast<float>(output_scale),
+            1.0f / static_cast<float>(next_act_scale)
+    );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
 template <int InDim, int OutDim, bool ApplyRelu, typename ScaleT>
@@ -4659,34 +4856,63 @@ torch::Tensor smoe_forward_simple_w4a4(
 ) {
     auto meta = build_route_metadata(x, topk_idx, topk_score);
 
-    auto h_route = torch::empty({meta.x_route.size(0), kFfDim}, x.options());
     auto y_route = torch::empty({meta.x_route.size(0), kHiddenDim}, x.options());
     auto out = torch::empty({x.size(0), kHiddenDim}, x.options());
 
-    launch_grouped_linear_simple_w4a4<kHiddenDim, kFfDim, true>(
-        meta.x_route,
-        w1_pack,
-        b1,
-        meta.counts,
-        meta.offsets,
-        h_route,
-        meta.max_routes_per_expert,
-        fc1_act_scale,
-        fc1_weight_scale,
-        fc1_output_scale
-    );
-    launch_grouped_linear_simple_w4a4<kFfDim, kHiddenDim, false>(
-        h_route,
-        w2_pack,
-        b2,
-        meta.counts,
-        meta.offsets,
-        y_route,
-        meta.max_routes_per_expert,
-        fc2_act_scale,
-        fc2_weight_scale,
-        fc2_output_scale
-    );
+    if (env_flag_enabled("USE_SIMPLE_W4A4_FC1_PACK_OUTPUT", true)) {
+        auto h_pack = torch::empty({meta.x_route.size(0), kFfDim / 8}, x.options().dtype(torch::kInt32));
+        launch_grouped_linear_simple_w4a4_pack_output<kHiddenDim, kFfDim, true>(
+            meta.x_route,
+            w1_pack,
+            b1,
+            meta.counts,
+            meta.offsets,
+            h_pack,
+            meta.max_routes_per_expert,
+            fc1_act_scale,
+            fc1_weight_scale,
+            fc1_output_scale,
+            fc2_act_scale
+        );
+        launch_grouped_linear_simple_w4a4_packed_input<kFfDim, kHiddenDim, false>(
+            h_pack,
+            w2_pack,
+            b2,
+            meta.counts,
+            meta.offsets,
+            y_route,
+            meta.max_routes_per_expert,
+            fc2_act_scale,
+            fc2_weight_scale,
+            fc2_output_scale
+        );
+    } else {
+        auto h_route = torch::empty({meta.x_route.size(0), kFfDim}, x.options());
+        launch_grouped_linear_simple_w4a4<kHiddenDim, kFfDim, true>(
+            meta.x_route,
+            w1_pack,
+            b1,
+            meta.counts,
+            meta.offsets,
+            h_route,
+            meta.max_routes_per_expert,
+            fc1_act_scale,
+            fc1_weight_scale,
+            fc1_output_scale
+        );
+        launch_grouped_linear_simple_w4a4<kFfDim, kHiddenDim, false>(
+            h_route,
+            w2_pack,
+            b2,
+            meta.counts,
+            meta.offsets,
+            y_route,
+            meta.max_routes_per_expert,
+            fc2_act_scale,
+            fc2_weight_scale,
+            fc2_output_scale
+        );
+    }
 
     if (x.size(0) == 0) {
         return out;
@@ -4722,34 +4948,63 @@ torch::Tensor smoe_forward_simple_w4a4_with_residual(
 
     auto meta = build_route_metadata(x, topk_idx, topk_score);
 
-    auto h_route = torch::empty({meta.x_route.size(0), kFfDim}, x.options());
     auto y_route = torch::empty({meta.x_route.size(0), kHiddenDim}, x.options());
     auto out = torch::empty({x.size(0), kHiddenDim}, x.options());
 
-    launch_grouped_linear_simple_w4a4<kHiddenDim, kFfDim, true>(
-        meta.x_route,
-        w1_pack,
-        b1,
-        meta.counts,
-        meta.offsets,
-        h_route,
-        meta.max_routes_per_expert,
-        fc1_act_scale,
-        fc1_weight_scale,
-        fc1_output_scale
-    );
-    launch_grouped_linear_simple_w4a4<kFfDim, kHiddenDim, false>(
-        h_route,
-        w2_pack,
-        b2,
-        meta.counts,
-        meta.offsets,
-        y_route,
-        meta.max_routes_per_expert,
-        fc2_act_scale,
-        fc2_weight_scale,
-        fc2_output_scale
-    );
+    if (env_flag_enabled("USE_SIMPLE_W4A4_FC1_PACK_OUTPUT", true)) {
+        auto h_pack = torch::empty({meta.x_route.size(0), kFfDim / 8}, x.options().dtype(torch::kInt32));
+        launch_grouped_linear_simple_w4a4_pack_output<kHiddenDim, kFfDim, true>(
+            meta.x_route,
+            w1_pack,
+            b1,
+            meta.counts,
+            meta.offsets,
+            h_pack,
+            meta.max_routes_per_expert,
+            fc1_act_scale,
+            fc1_weight_scale,
+            fc1_output_scale,
+            fc2_act_scale
+        );
+        launch_grouped_linear_simple_w4a4_packed_input<kFfDim, kHiddenDim, false>(
+            h_pack,
+            w2_pack,
+            b2,
+            meta.counts,
+            meta.offsets,
+            y_route,
+            meta.max_routes_per_expert,
+            fc2_act_scale,
+            fc2_weight_scale,
+            fc2_output_scale
+        );
+    } else {
+        auto h_route = torch::empty({meta.x_route.size(0), kFfDim}, x.options());
+        launch_grouped_linear_simple_w4a4<kHiddenDim, kFfDim, true>(
+            meta.x_route,
+            w1_pack,
+            b1,
+            meta.counts,
+            meta.offsets,
+            h_route,
+            meta.max_routes_per_expert,
+            fc1_act_scale,
+            fc1_weight_scale,
+            fc1_output_scale
+        );
+        launch_grouped_linear_simple_w4a4<kFfDim, kHiddenDim, false>(
+            h_route,
+            w2_pack,
+            b2,
+            meta.counts,
+            meta.offsets,
+            y_route,
+            meta.max_routes_per_expert,
+            fc2_act_scale,
+            fc2_weight_scale,
+            fc2_output_scale
+        );
+    }
 
     if (x.size(0) == 0) {
         return out;
