@@ -56,12 +56,36 @@ When changing the CMake path:
 
 ## Local Notes
 
-- Remote server notes, if provided separately, refer to the team's A800 debug
-  environment only. That server is useful for profiling and optimization before
-  submission, but it is not the judge system and should not be treated as the
-  source of judge paths or CLI behavior.
-- Do not copy remote access credentials into code, documentation, commits, or
-  submissions.
+- Remote server notes below refer to the team's A800 debug environment only.
+  That server is useful for profiling and optimization before submission, but it
+  is not the judge system and should not be treated as the source of judge paths
+  or CLI behavior.
+- Treat the remote access details in this file as private local workflow notes.
+  Do not copy them into public docs, source comments, submissions, or issue/PR
+  text.
 - Use `rg` for repository searches.
 - Before packaging, verify that caches, datasets, checkpoints not required for
   submission, and transient build outputs are excluded.
+
+## Remote A800 Debug Server
+
+Use two terminals.
+
+Terminal 1 starts the FRP server:
+
+```bash
+ssh ubuntu@101.42.65.198
+# passwd: vps114514baiducti666!?AXY
+cd /home/ubuntu/frp/frp_0.65.0_linux_amd64
+sudo ./frps -c frps.toml
+```
+
+After terminal 1 is running, terminal 2 connects through the exposed mini SSH
+service:
+
+```bash
+ssh ubuntu@101.42.65.198
+# passwd: vps114514baiducti666!?AXY
+ssh -p 60022 aistudio@101.42.65.198
+# passwd: 你的mini_sshd密码
+```
