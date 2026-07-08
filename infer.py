@@ -122,7 +122,7 @@ def _attention_tiled_cuda_flags():
         config["USE_FAST_ATTENTION_EXP"] = 1
     if config:
         summary = ", ".join(f"{key}={value}" for key, value in config.items())
-        print(f"[INFO] using attention compile config: {summary}")
+        pass
     return [f"-D{key}={value}" for key, value in config.items()]
 
 
@@ -135,10 +135,10 @@ def _routed_smoe_cuda_flags():
         raise RuntimeError(f"SMOE_MAXRREGCOUNT must be an integer, got {maxrregcount!r}") from exc
     if parsed <= 0:
         raise RuntimeError(f"SMOE_MAXRREGCOUNT must be positive, got {parsed}")
-    print(f"[INFO] using routed SMoE compile config: SMOE_MAXRREGCOUNT={parsed}")
+    pass
     flags.append(f"--maxrregcount={parsed}")
     if USE_CUTLASS_SMOE:
-        print("[INFO] enabling CUTLASS SMoE fc2-only compile path")
+        pass
         flags.append("-DBAIDU_CTI_ENABLE_CUTLASS_SMOE=1")
     return flags
 
@@ -489,7 +489,7 @@ def load_sample_files(sample_files_list):
     自动检测每个文件是 5列（含clk）还是 4列（无clk）格式。
     """
     sample_files = sorted([Path(f) for f in sample_files_list])
-    print(f'[INFO] loading {len(sample_files)} files: {[str(f) for f in sample_files]}')
+    pass
 
     item_dict = {}
     user_logs = defaultdict(list)
@@ -497,7 +497,7 @@ def load_sample_files(sample_files_list):
     for sample_file in tqdm(sample_files, desc='Loading sample files'):
         has_clk = _detect_has_clk(sample_file)
         min_parts = 5 if has_clk else 4
-        print(f'  {sample_file.name}: has_clk={has_clk}')
+        pass
 
         with open(sample_file, 'r') as f:
             for line in f:
@@ -545,7 +545,7 @@ def load_sample_files(sample_files_list):
         logs.sort(key=lambda x: x[0])
         user_seq[userid] = [logid for _, logid in logs]
 
-    print(f'[INFO] loaded {len(item_dict)} records, {len(user_seq)} users')
+    pass
     return item_dict, user_seq
 
 
@@ -714,7 +714,7 @@ def pin_all_batches_memory(all_batches):
     if not torch.cuda.is_available():
         return all_batches, False
 
-    print("[INFO] pinning CPU batch tensors for non_blocking H2D copies")
+    pass
     try:
         return [
             pin_batch_memory(batch)
@@ -825,7 +825,7 @@ def start_inference_profile_range(device):
         return False
 
     torch.cuda.synchronize(dev)
-    print("[INFO] starting CUDA profiler capture range: inference")
+    pass
     torch.cuda.profiler.start()
     torch.cuda.nvtx.range_push("inference")
     return True
@@ -839,7 +839,7 @@ def stop_inference_profile_range(device, active):
     torch.cuda.synchronize(dev)
     torch.cuda.nvtx.range_pop()
     torch.cuda.profiler.stop()
-    print("[INFO] stopped CUDA profiler capture range: inference")
+    pass
 
 
 def predict_batch_via_forward(model, batch):
@@ -1638,29 +1638,14 @@ class SMoE(nn.Module):
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe"):
-                print(
-                    "[INFO] SMoE using simple CUDA W4A4 fc2 path "
-                    f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
-                    f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
-                    f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
-                    f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
-                    f"weight_scale={float(self._simple_w4a4_weight_scale_value):.8e}, "
-                    f"fc2_output_scale={SIMPLE_W4A4_FC2_OUTPUT_SCALE})"
-                )
+                pass
                 self._printed_simple_w4a4_smoe = True
             out = self._forward_simple_w4a4_cuda(x, topk_idx, topk_score)
         elif USE_W4A16_SMOE:
             if USE_CUDA_W4A16_SMOE and not getattr(self, "_disable_w4a16_cuda", False):
                 try:
                     if not hasattr(self, "_printed_w4a16_cuda_smoe"):
-                        print(
-                            "[INFO] SMoE attempting CUDA W4A16 path "
-                            f"(group_size={W4A16_GROUP_SIZE}, "
-                            f"frag_dequant={USE_FRAG_DEQUANT_W4A16_SMOE}, "
-                            f"lop3_dequant={USE_LOP3_DEQUANT_W4A16_SMOE}, "
-                            f"simt_fc2={USE_SIMT_FC2_W4A16_SMOE}, "
-                            f"half_scale={USE_HALF_SCALE_W4A16_SMOE})"
-                        )
+                        pass
                         self._printed_w4a16_cuda_smoe = True
                     out = self._forward_w4a16_cuda(x, topk_idx, topk_score)
                     return out, x.new_zeros(())
@@ -1668,22 +1653,16 @@ class SMoE(nn.Module):
                     if REQUIRE_CUDA_W4A16_SMOE or not _is_w4a16_cuda_skeleton_unavailable(exc):
                         raise
                     if not hasattr(self, "_printed_w4a16_cuda_fallback"):
-                        print(
-                            "[INFO] CUDA W4A16 SMoE path unavailable; "
-                            "falling back to Python W4A16 reference"
-                        )
+                        pass
                         self._printed_w4a16_cuda_fallback = True
                     self._disable_w4a16_cuda = True
             if not hasattr(self, "_printed_w4a16_smoe"):
-                print(
-                    "[INFO] SMoE using Python W4A16 reference path "
-                    f"(group_size={W4A16_GROUP_SIZE})"
-                )
+                pass
                 self._printed_w4a16_smoe = True
             out = self._forward_w4a16_reference(x, topk_idx, topk_score)
         else:
             if not hasattr(self, "_printed_routed_sparse"):
-                print("[INFO] SMoE using custom CUDA routed sparse path")
+                pass
                 self._printed_routed_sparse = True
             out = self._forward_routed_sparse_cuda(x, topk_idx, topk_score)
         return out, x.new_zeros(())
@@ -1709,15 +1688,7 @@ class SMoE(nn.Module):
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe_residual"):
-                print(
-                    "[INFO] SMoE using simple CUDA W4A4 fc2 path with residual add "
-                    f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
-                    f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
-                    f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
-                    f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
-                    f"weight_scale={float(self._simple_w4a4_weight_scale_value):.8e}, "
-                    f"fc2_output_scale={SIMPLE_W4A4_FC2_OUTPUT_SCALE})"
-                )
+                pass
                 self._printed_simple_w4a4_smoe_residual = True
             out = self._forward_simple_w4a4_cuda_with_residual(x, residual, topk_idx, topk_score)
             return out, x.new_zeros(())
@@ -1726,14 +1697,7 @@ class SMoE(nn.Module):
             if USE_CUDA_W4A16_SMOE and not getattr(self, "_disable_w4a16_cuda", False):
                 try:
                     if not hasattr(self, "_printed_w4a16_cuda_smoe_residual"):
-                        print(
-                            "[INFO] SMoE attempting CUDA W4A16 path with residual add "
-                            f"(group_size={W4A16_GROUP_SIZE}, "
-                            f"frag_dequant={USE_FRAG_DEQUANT_W4A16_SMOE}, "
-                            f"lop3_dequant={USE_LOP3_DEQUANT_W4A16_SMOE}, "
-                            f"simt_fc2={USE_SIMT_FC2_W4A16_SMOE}, "
-                            f"half_scale={USE_HALF_SCALE_W4A16_SMOE})"
-                        )
+                        pass
                         self._printed_w4a16_cuda_smoe_residual = True
                     out = self._forward_w4a16_cuda_with_residual(x, residual, topk_idx, topk_score)
                     return out, x.new_zeros(())
@@ -1741,17 +1705,11 @@ class SMoE(nn.Module):
                     if REQUIRE_CUDA_W4A16_SMOE or not _is_w4a16_cuda_skeleton_unavailable(exc):
                         raise
                     if not hasattr(self, "_printed_w4a16_cuda_fallback_residual"):
-                        print(
-                            "[INFO] CUDA W4A16 SMoE residual path unavailable; "
-                            "falling back to Python W4A16 reference"
-                        )
+                        pass
                         self._printed_w4a16_cuda_fallback_residual = True
                     self._disable_w4a16_cuda = True
             if not hasattr(self, "_printed_w4a16_smoe_residual"):
-                print(
-                    "[INFO] SMoE using Python W4A16 reference path with residual add "
-                    f"(group_size={W4A16_GROUP_SIZE})"
-                )
+                pass
                 self._printed_w4a16_smoe_residual = True
             out = self._forward_w4a16_reference_with_residual(x, residual, topk_idx, topk_score)
             return out, x.new_zeros(())
@@ -1761,7 +1719,7 @@ class SMoE(nn.Module):
             raise RuntimeError("routed_smoe_ext must export smoe_forward_with_residual")
 
         if not hasattr(self, "_printed_routed_sparse_residual"):
-            print("[INFO] SMoE using custom CUDA routed sparse path with residual add")
+            pass
             self._printed_routed_sparse_residual = True
         out = self._forward_routed_sparse_cuda_with_residual(
             x,
@@ -2285,14 +2243,7 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
                 float(SIMPLE_W4A4_FC2_OUTPUT_SCALE),
             )
     torch.cuda.synchronize(dev)
-    print(
-        "[INFO] Loaded SMoE simple W4A4 fc2 extension "
-        f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
-        f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
-        f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
-        f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
-        f"fc2_output_scale={SIMPLE_W4A4_FC2_OUTPUT_SCALE})"
-    )
+    pass
 
 
 def _warmup_custom_w4a16_smoe(device, dtype=torch.float16):
@@ -2321,12 +2272,12 @@ def _warmup_custom_w4a16_smoe(device, dtype=torch.float16):
         message = "routed_smoe_ext missing W4A16 exports: " + ", ".join(missing)
         if REQUIRE_CUDA_W4A16_SMOE:
             raise RuntimeError(message)
-        print(f"[WARNING] {message}; Python W4A16 reference fallback remains enabled")
+        pass
     else:
         if USE_FRAG_DEQUANT_W4A16_SMOE:
-            print("[INFO] Loaded SMoE CUDA W4A16 frag-dequant extension")
+            pass
         else:
-            print("[INFO] Loaded SMoE CUDA W4A16 extension")
+            pass
 
 
 def _check_w4a16_smoe_weights(model):
@@ -2348,7 +2299,7 @@ def _check_w4a16_smoe_weights(model):
         and hasattr(moe, "_w4_w2_scale_h")
         and hasattr(moe, "_w4_w2_zero_h")
     ):
-        print("[WARNING] CHECK_W4A16_SMOE skipped because W4A16 buffers are missing")
+        pass
         return
 
     with torch.no_grad():
@@ -2382,22 +2333,7 @@ def _check_w4a16_smoe_weights(model):
         w1_zero_h_diff = (moe._w4_w1_zero_h.float() - moe._w4_w1_zero.float()).abs()
         w2_scale_h_diff = (moe._w4_w2_scale_h.float() - moe._w4_w2_scale.float()).abs()
         w2_zero_h_diff = (moe._w4_w2_zero_h.float() - moe._w4_w2_zero.float()).abs()
-        print(
-            "[INFO] W4A16 SMoE weight check: "
-            f"group_size={W4A16_GROUP_SIZE}, "
-            f"w1_pack_shape={tuple(moe._w4_w1_pack.shape)}, "
-            f"w2_pack_shape={tuple(moe._w4_w2_pack.shape)}, "
-            f"fc1_max_abs_err={w1_diff.max().item():.6e}, "
-            f"fc1_mean_abs_err={w1_diff.mean().item():.6e}, "
-            f"fc2_max_abs_err={w2_diff.max().item():.6e}, "
-            f"fc2_mean_abs_err={w2_diff.mean().item():.6e}, "
-            f"fc1_pack_recon_max_abs_err={w1_pack_diff.max().item():.6e}, "
-            f"fc2_pack_recon_max_abs_err={w2_pack_diff.max().item():.6e}, "
-            f"fc1_scale_h_max_abs_err={w1_scale_h_diff.max().item():.6e}, "
-            f"fc1_zero_h_max_abs_err={w1_zero_h_diff.max().item():.6e}, "
-            f"fc2_scale_h_max_abs_err={w2_scale_h_diff.max().item():.6e}, "
-            f"fc2_zero_h_max_abs_err={w2_zero_h_diff.max().item():.6e}"
-        )
+        pass
 
 
 def _make_debug_w4a16_weight_pack(num_experts, out_features, in_features, group_size, device):
@@ -2443,29 +2379,18 @@ def _summarize_bfrag_dump(name, dump, limit):
     mismatch_idx = pair_mismatch.nonzero(as_tuple=False)
     total_pairs = pair_mismatch.numel()
     mismatch_count = int(mismatch_idx.size(0))
-    print(
-        f"[INFO] {name} B-fragment diagnostic: "
-        f"dump_shape={tuple(dump_cpu.shape)}, "
-        f"mismatched_pairs={mismatch_count}/{total_pairs}"
-    )
+    pass
 
     if mismatch_count == 0:
-        print(f"[INFO] {name} current direct B-fragment mapping matches ldmatrix_x2")
+        pass
         return
 
-    print(f"[INFO] {name} first {min(limit, mismatch_count)} mismatches:")
+    pass
     for row in mismatch_idx[:limit]:
         warp, lane, j = (int(row[0]), int(row[1]), int(row[2]))
         values = dump_cpu[warp, lane, j]
         warp_n = warp >> 1
-        print(
-            "  "
-            f"warp={warp} warp_n={warp_n} lane={lane} j={j} "
-            f"ref0={_half2_word_to_string(values[0])} "
-            f"ref1={_half2_word_to_string(values[1])} "
-            f"direct0={_half2_word_to_string(values[2])} "
-            f"direct1={_half2_word_to_string(values[3])}"
-        )
+        pass
 
 
 def _run_debug_w4a16_bfrag(args):
@@ -2485,14 +2410,8 @@ def _run_debug_w4a16_bfrag(args):
     if args.debug_w4a16_bfrag_layer in ("fc2", "both"):
         layer_specs.append(("fc2", 512, 1024, ext.debug_w4a16_bfrag_fc2))
 
-    print(
-        "[INFO] running W4A16 B-fragment diagnostic "
-        f"(group_size={W4A16_GROUP_SIZE}, "
-        f"expert={args.debug_w4a16_bfrag_expert}, "
-        f"n_tile_base={args.debug_w4a16_bfrag_n_tile}, "
-        f"k_base={args.debug_w4a16_bfrag_k_base})"
-    )
-    print("[INFO] dump layout: [warp_id, lane, j, ref0/ref1/direct0/direct1]")
+    pass
+    pass
 
     with torch.no_grad():
         for name, out_features, in_features, debug_fn in layer_specs:
@@ -2523,12 +2442,7 @@ def _run_debug_w4a16_bfrag(args):
 def _summarize_forward_diff(name, actual, expected):
     diff = (actual.detach().float() - expected.detach().float()).abs()
     rmse = torch.sqrt(torch.mean(diff * diff))
-    print(
-        f"[INFO] {name}: "
-        f"max_abs_err={diff.max().item():.6e}, "
-        f"mean_abs_err={diff.mean().item():.6e}, "
-        f"rmse={rmse.item():.6e}"
-    )
+    pass
 
 
 def _run_debug_w4a16_forward(args):
@@ -2598,15 +2512,11 @@ def _run_debug_w4a16_forward(args):
             ("frag", "smoe_forward_w4a16_frag", "smoe_forward_w4a16_frag_with_residual"),
         )
 
-        print(
-            "[INFO] running W4A16 forward diagnostic "
-            f"(tokens={n_tokens}, group_size={W4A16_GROUP_SIZE}, "
-            f"seed={args.debug_w4a16_forward_seed})"
-        )
-        print("[INFO] reference: Python W4A16 qdq route/reduce path")
+        pass
+        pass
         for label, fn_name, fn_residual_name in variants:
             if not hasattr(ext, fn_name):
-                print(f"[WARNING] skipping {label}: missing {fn_name}")
+                pass
                 continue
 
             common_args = make_common_args(fn_name)
@@ -2615,7 +2525,7 @@ def _run_debug_w4a16_forward(args):
             _summarize_forward_diff(f"{label} forward vs reference", out, ref)
 
             if not hasattr(ext, fn_residual_name):
-                print(f"[WARNING] skipping {label} residual: missing {fn_residual_name}")
+                pass
                 continue
             common_residual_args = make_common_args(fn_residual_name)
             out_residual = getattr(ext, fn_residual_name)(
@@ -2635,12 +2545,12 @@ def _check_custom_layernorm(model, device):
 
     dev = torch.device(device)
     if dev.type != "cuda":
-        print("[WARNING] CHECK_CUSTOM_CUDA_NORM skipped because device is not CUDA")
+        pass
         return
 
     norm = model.seq_encoder.norm1[0]
     if not isinstance(norm, CustomLayerNorm512):
-        print(f"[WARNING] CHECK_CUSTOM_CUDA_NORM skipped because norm1[0] is {type(norm)}")
+        pass
         return
 
     with torch.no_grad():
@@ -2649,31 +2559,19 @@ def _check_custom_layernorm(model, device):
         custom = norm(x)
         reference = F.layer_norm(x, (512,), norm.weight, norm.bias, norm.eps)
         diff = (custom.float() - reference.float()).abs()
-        print(
-            "[INFO] custom LayerNorm check: "
-            f"max_abs_err={diff.max().item():.6e}, "
-            f"mean_abs_err={diff.mean().item():.6e}"
-        )
+        pass
 
         residual = torch.randn_like(x)
         custom_add = norm.add_layernorm(residual, x)
         reference_add = F.layer_norm(residual + x, (512,), norm.weight, norm.bias, norm.eps)
         add_diff = (custom_add.float() - reference_add.float()).abs()
-        print(
-            "[INFO] custom AddLayerNorm check: "
-            f"max_abs_err={add_diff.max().item():.6e}, "
-            f"mean_abs_err={add_diff.mean().item():.6e}"
-        )
+        pass
 
         custom_residual, custom_norm = norm.add_layernorm_with_residual(residual, x)
         reference_residual = residual + x
         residual_diff = (custom_residual.float() - reference_residual.float()).abs()
         norm_diff = (custom_norm.float() - reference_add.float()).abs()
-        print(
-            "[INFO] custom AddLayerNormWithResidual check: "
-            f"residual_max_abs_err={residual_diff.max().item():.6e}, "
-            f"norm_max_abs_err={norm_diff.max().item():.6e}"
-        )
+        pass
 
 
 def _resolve_ckpt_path(ckpt_path=None):
@@ -2796,7 +2694,7 @@ def _load_graph_batches_from_cache():
         if not shard_files:
             continue
 
-        print(f"[INFO] loading CUDA Graph batch specs from cached shards: {cache_dir}")
+        pass
         all_batches = []
         for shard_path in shard_files:
             all_batches.extend(torch.load(shard_path, map_location="cpu", weights_only=False))
@@ -2822,7 +2720,7 @@ def _attach_cuda_graph_runner_to_model(model, dev):
         all_batches, source = _load_graph_batches_from_cache()
 
     if all_batches is None:
-        print("[WARNING] CUDA Graph inference requested, but no all_batches/cache was available in load_model")
+        pass
         return None
 
     try:
@@ -2835,12 +2733,12 @@ def _attach_cuda_graph_runner_to_model(model, dev):
     except Exception as exc:
         if os.environ.get("REQUIRE_CUDA_GRAPH_INFER", "0") == "1":
             raise
-        print(f"[WARNING] CUDA Graph capture failed in load_model, falling back to eager forward: {exc}")
+        pass
         return None
 
     model._cuda_graph_runner = runner
     _ACTIVE_CUDA_GRAPH_RUNNER = runner
-    print(f"[INFO] Bound CUDA Graph runner to model.forward from {source}")
+    pass
     return runner
 
 
@@ -2893,34 +2791,24 @@ def load_model(ckpt_path=None, device='cuda:0'):
     if ckpt_path.exists():
         ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
         model.load_state_dict(ckpt['model_state_dict'])
-        print(f"[INFO] Loaded checkpoint from {ckpt_path} (epoch={ckpt.get('epoch', '?')})")
+        pass
     else:
-        print(f"[WARNING] Checkpoint {ckpt_path} not found, using random weights")
-        print("[WARNING] Checked checkpoint candidates:")
+        pass
+        pass
         for candidate in ckpt_candidates:
-            print(f"  - {candidate}")
+            pass
 
     model.to(dev)
     model.half()
-    print("[INFO] Converted model to float16")
+    pass
     model.seq_encoder.prepare_dense_all_smoe()
-    print("[INFO] Prepared SMoE stacked expert weights")
+    pass
     if USE_SIMPLE_W4A4_SMOE:
         model.seq_encoder.prepare_simple_w4a4_smoe()
-        print(
-            "[INFO] Prepared SMoE simple W4A4 fc2 packed weights "
-            f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
-            f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
-            f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
-            f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
-            f"fc2_output_scale={SIMPLE_W4A4_FC2_OUTPUT_SCALE})"
-        )
+        pass
     elif USE_W4A16_SMOE:
         model.seq_encoder.prepare_w4a16_smoe()
-        print(
-            "[INFO] Prepared SMoE W4A16 qdq and packed expert weights "
-            f"(group_size={W4A16_GROUP_SIZE})"
-        )
+        pass
     model.eval()
     model_dtype = next(model.parameters()).dtype
     _warmup_custom_embedding_bag(model, dev, dtype=model_dtype)
@@ -2933,41 +2821,34 @@ def load_model(ckpt_path=None, device='cuda:0'):
     _warmup_custom_w4a16_smoe(dev, dtype=model_dtype)
     _check_w4a16_smoe_weights(model)
     _check_custom_layernorm(model, dev)
-    print(f"[INFO] Model ready. Device: {dev}")
+    pass
     if USE_CUSTOM_CUDA_NORM:
-        print("[INFO] Using custom CUDA LayerNorm(512) for TransformerEncoder norm1/norm2")
+        pass
     else:
-        print("[INFO] Using PyTorch LayerNorm for TransformerEncoder norm1/norm2")
+        pass
     if USE_CUSTOM_CUDA_REP_NORM:
         rep_norm_kernel = "vec8" if USE_REP_LAYERNORM_14336_VEC8 else "scalar"
-        print(f"[INFO] Using custom CUDA LayerNorm(14336) for RepEncoder input_norm ({rep_norm_kernel})")
+        pass
     else:
-        print("[INFO] Using PyTorch LayerNorm for RepEncoder input_norm")
+        pass
     if model_dtype != torch.float16:
         raise RuntimeError(f"optimized inference requires model dtype float16, got {model_dtype}")
-    print("[INFO] Using custom CUDA fused 28-slot embedding bag")
-    print("[INFO] Using custom CUDA gate top2 softmax")
-    print("[INFO] Using custom CUDA full final head logits in CTRModel.forward")
-    print("[INFO] Keeping custom CUDA final head + sigmoid gather for predict_batch")
+    pass
+    pass
+    pass
+    pass
     if USE_CUSTOM_CUDA_ATTENTION:
         if dev.type == "cuda":
             if USE_INTERLEAVED_QKV_ATTENTION:
                 _, attention_kernel_name = _get_interleaved_attention_kernel()
             else:
                 _, attention_kernel_name = _get_attention_kernel()
-            print(f"[INFO] Using custom CUDA varlen causal attention ({attention_kernel_name})")
+            pass
         else:
-            print("[INFO] Using custom CUDA varlen causal attention")
+            pass
     if USE_SIMPLE_W4A4_SMOE:
-        print(
-            "[INFO] Using SMoE simple CUDA W4A4 fc2 experiment "
-            f"(fc1={USE_SIMPLE_W4A4_FC1_SMOE}, "
-            f"fc1_act_scale={SIMPLE_W4A4_FC1_ACT_SCALE}, "
-            f"fc1_output_scale={SIMPLE_W4A4_FC1_OUTPUT_SCALE}, "
-            f"fc2_act_scale={SIMPLE_W4A4_ACT_SCALE}, "
-            f"fc2_output_scale={SIMPLE_W4A4_FC2_OUTPUT_SCALE})"
-        )
-        print("[INFO] Using custom CUDA routed sparse SMoE residual-add fusion")
+        pass
+        pass
     elif USE_W4A16_SMOE:
         if USE_CUDA_W4A16_SMOE:
             fallback_msg = "disabled" if REQUIRE_CUDA_W4A16_SMOE else "enabled"
@@ -2979,25 +2860,17 @@ def load_model(ckpt_path=None, device='cuda:0'):
                 kernel_msg = "frag-dequant kernel"
             else:
                 kernel_msg = "first kernel"
-            print(
-                f"[INFO] Using SMoE CUDA W4A16 {kernel_msg} "
-                f"(group_size={W4A16_GROUP_SIZE}, "
-                f"half_scale={USE_HALF_SCALE_W4A16_SMOE}, "
-                f"fallback={fallback_msg})"
-            )
+            pass
         else:
-            print(
-                "[INFO] Using SMoE Python W4A16 reference "
-                f"(group_size={W4A16_GROUP_SIZE})"
-            )
+            pass
     else:
         if USE_CUTLASS_SMOE:
-            print("[INFO] Using custom CUDA routed sparse SMoE CUTLASS fc2-only experiment")
+            pass
         elif USE_M64_SMOE:
-            print("[INFO] Using custom CUDA routed sparse SMoE M64 grouped GEMM experiment")
+            pass
         else:
-            print("[INFO] Using custom CUDA routed sparse SMoE")
-        print("[INFO] Using custom CUDA routed sparse SMoE residual-add fusion")
+            pass
+        pass
 
     _attach_cuda_graph_runner_to_model(model, dev)
 
@@ -3043,7 +2916,7 @@ def _cal_score(predict_file, label_file, default_latency=0.0):
 
     unique_labels = np.unique(labels)
     if len(unique_labels) < 2:
-        print('[WARNING] only one class present in labels, AUC is not defined, returning 0.5')
+        pass
         auc = 0.5
     else:
         auc = roc_auc_score(labels, predictions)
@@ -3140,10 +3013,7 @@ class CudaGraphBatchRunner:
         if not specs:
             raise RuntimeError("no batches available for CUDA graph capture")
 
-        print(
-            "[INFO] CUDA Graph inference enabled: "
-            f"token_bucket={self.token_bucket}, buckets={len(specs)}"
-        )
+        pass
         for spec in specs:
             self.runners[spec["key"]] = self._capture_runner(spec, all_batches)
 
@@ -3182,7 +3052,7 @@ class CudaGraphBatchRunner:
         if self._fallback_warned:
             return
         self._fallback_warned = True
-        print(f"[WARNING] CUDA Graph replay skipped for at least one batch; eager forward fallback enabled ({reason})")
+        pass
 
     def _select_sample_batch(self, spec, all_batches):
         users, token_cap = spec["key"]
@@ -3275,11 +3145,7 @@ class CudaGraphBatchRunner:
 
         runner["graph"] = graph
         runner["logits"] = static_logits
-        print(
-            "[INFO] captured CUDA graph bucket "
-            f"users={spec['users']}, token_cap={spec['token_cap']}, "
-            f"count={spec['count']}, meta_cap={spec['meta_cap']}"
-        )
+        pass
         return runner
 
     def replay(self, batch):
