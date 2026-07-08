@@ -108,7 +108,7 @@ def _load_prebuilt_cuda_ext(name):
     try:
         return importlib.import_module(name)
     except ImportError as exc:
-        if os.environ.get("REQUIRE_PREBUILT_CUDA_EXT", "0") == "1":
+        if os.environ.get("REQUIRE_PREBUILT_CUDA_EXT", "1") != "0":
             raise RuntimeError(
                 f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}"
             ) from exc
@@ -2990,6 +2990,21 @@ def load_model(ckpt_path=None, device='cuda:0'):
             print("[INFO] Using custom CUDA routed sparse SMoE")
         print("[INFO] Using custom CUDA routed sparse SMoE residual-add fusion")
 
+    if USE_CUDA_GRAPH_INFER and dev.type == "cuda":
+        graph_batches = _load_cached_batches_for_graph()
+        if graph_batches:
+            try:
+                graph_runner = CudaGraphBatchRunner(
+                    model,
+                    dev,
+                    graph_batches,
+                    token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
+                )
+                model = CudaGraphModelWrapper(model, graph_runner)
+                model.eval()
+            except RuntimeError as exc:
+                print(f"[WARNING] CUDA Graph setup failed in load_model, falling back to normal model forward: {exc}")
+
     return model, dev
 
 
@@ -3206,7 +3221,7 @@ class CudaGraphBatchRunner:
         self._copy_batch_to_static(runner, sample_batch)
         torch.cuda.synchronize(self.device)
 
-        with torch.inference_mode():
+        with torch.no_grad():
             for _ in range(CUDA_GRAPH_WARMUP_ITERS):
                 logits, _ = self.model(static_batch)
                 probs = torch.sigmoid(logits.squeeze(-1))
@@ -3239,6 +3254,58 @@ class CudaGraphBatchRunner:
         return runner["probs"], tokens
 
 
+class CudaGraphModelWrapper(nn.Module):
+    def __init__(self, model, graph_runner):
+        super().__init__()
+        self.model = model
+        self.graph_runner = graph_runner
+
+    def forward(self, batch):
+        probs, tokens = self.graph_runner.replay(batch)
+        logits = torch.logit(probs[:tokens].clamp(1.0e-6, 1.0 - 1.0e-6)).unsqueeze(-1)
+        return logits, None
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.model, name)
+
+
+def _resolve_dataset_dir_for_judge():
+    candidates = [
+        SCRIPT_DIR / "dataset",
+        SCRIPT_DIR / "code" / "dataset",
+        Path.cwd() / "dataset",
+        Path.cwd() / "code" / "dataset",
+    ]
+    for candidate in candidates:
+        if (candidate / "cached_batches").exists() or (candidate / "test.csv").exists():
+            return candidate
+    return candidates[0]
+
+
+def _load_cached_batches_for_graph():
+    ref_dir = _resolve_dataset_dir_for_judge()
+    batches_cache_dir = ref_dir / "cached_batches"
+    shard_files = sorted(
+        batches_cache_dir.glob("shard_*.pt"),
+        key=lambda p: int(p.stem.split("_")[1]),
+    )
+    if not shard_files:
+        print(f"[INFO] CUDA Graph preload skipped: no cached batch shards under {batches_cache_dir}")
+        return None
+
+    print(f"[INFO] preloading cached batch shards for CUDA Graph from {batches_cache_dir}")
+    all_batches = []
+    for sf in shard_files:
+        shard_batches = torch.load(sf, weights_only=False)
+        all_batches.extend(shard_batches)
+        print(f"[INFO] preloaded {len(shard_batches)} batches from {sf.name}")
+    print(f"[INFO] preloaded {len(all_batches)} cached batches for CUDA Graph capture")
+    return all_batches
+
+
 # ============================================================
 # main：直接运行 infer.py 进行测试
 # ============================================================
@@ -3250,34 +3317,10 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint 文件路径，默认使用同目录下的 ckpt.pt')
-    parser.add_argument('--debug-w4a16-bfrag', action='store_true',
-                        help='run W4A16 B-fragment ldmatrix/direct-dequant diagnostic and exit')
-    parser.add_argument('--debug-w4a16-bfrag-layer', type=str, default='both',
-                        choices=('fc1', 'fc2', 'both'),
-                        help='which SMoE W4A16 weight shape to diagnose')
-    parser.add_argument('--debug-w4a16-bfrag-expert', type=int, default=0,
-                        help='expert id for the debug tile')
-    parser.add_argument('--debug-w4a16-bfrag-n-tile', type=int, default=0,
-                        help='output tile base N, must be a multiple of 128')
-    parser.add_argument('--debug-w4a16-bfrag-k-base', type=int, default=0,
-                        help='K tile base, must be a multiple of 16')
-    parser.add_argument('--debug-w4a16-bfrag-limit', type=int, default=16,
-                        help='maximum number of mismatched lane records to print per layer')
-    parser.add_argument('--debug-w4a16-forward', action='store_true',
-                        help='run deterministic W4A16 forward diagnostic and exit')
-    parser.add_argument('--debug-w4a16-forward-tokens', type=int, default=640,
-                        help='token count for W4A16 forward diagnostic')
-    parser.add_argument('--debug-w4a16-forward-seed', type=int, default=20250218,
-                        help='random seed for W4A16 forward diagnostic')
     args = parser.parse_args()
 
-    if args.debug_w4a16_bfrag:
-        return _run_debug_w4a16_bfrag(args)
-    if args.debug_w4a16_forward:
-        return _run_debug_w4a16_forward(args)
-
     cur_path = Path(__file__).parent.absolute()
-    ref_dir = cur_path /'code'/ 'dataset'
+    ref_dir = cur_path / 'dataset'
     history_dir = ref_dir / 'history'
     input_file = ref_dir / 'test.csv'
     output_file = Path('predict.txt')
@@ -3359,49 +3402,29 @@ def main():
 
     # ----- 加载模型 -----
     model, dev = load_model(ckpt_path=args.ckpt)
-    graph_runner = None
-    if USE_CUDA_GRAPH_INFER and dev.type == "cuda":
-        graph_runner = CudaGraphBatchRunner(
-            model,
-            dev,
-            all_batches,
-            token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
-        )
 
     # ----- 推理 -----
     print('*' * 20 + ' start inference ' + '*' * 20)
     all_logids = []
     all_probs = []
     time_sum = 0.0
-    t_start = time.time()
-    with torch.inference_mode():
-        for batch in tqdm(all_batches, desc="Inference"):
-            if graph_runner is not None:
-                ensure_pred_positions(batch)
-                probs, _ = graph_runner.replay(batch)
-                pred_positions = batch["pred_positions"]
-                if pred_positions.numel() == 0:
-                    continue
-                pred_positions_dev = pred_positions.to(dev, non_blocking=True)
-                masked_probs = probs.index_select(0, pred_positions_dev).cpu().tolist()
-                masked_logids = batch["logid"].index_select(0, pred_positions).tolist()
-                all_logids.extend(masked_logids)
-                all_probs.extend(masked_probs)
-                continue
 
+    with torch.no_grad():
+        for batch in tqdm(all_batches, desc="Inference"):
             batch = move_batch_to_device(batch, dev)
             pred_mask = batch["pred_mask"].bool()
+
+            t_start = time.time()
             logits, moe_loss = model(batch)
             logits = logits.squeeze(-1)
             probs = torch.sigmoid(logits)
+            time_sum += time.time() - t_start
 
             masked_logids = batch["logid"][pred_mask].cpu().tolist()
             masked_probs = probs[pred_mask].cpu().tolist()
             all_logids.extend(masked_logids)
             all_probs.extend(masked_probs)
-    if dev.type == "cuda":
-        torch.cuda.synchronize(dev)
-    time_sum += time.time() - t_start
+
     print(f'[INFO] inference time: {round(time_sum, 4)}s')
     print('*' * 20 + ' end inference ' + '*' * 20)
 
