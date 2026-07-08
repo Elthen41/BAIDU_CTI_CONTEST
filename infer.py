@@ -66,9 +66,10 @@ USE_HALF_SCALE_W4A16_SMOE = os.environ.get("USE_HALF_SCALE_W4A16_SMOE", "1") != 
 REQUIRE_CUDA_W4A16_SMOE = os.environ.get("REQUIRE_CUDA_W4A16_SMOE", "1") == "1"
 CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
-USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
+USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "0") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
+CUDA_GRAPH_MAIN_BATCH_FASTPATH = False
 ATTENTION_MMA_BR = 16
 W4A16_GROUP_SIZE = _env_positive_int("W4A16_GROUP_SIZE", 128)
 SIMPLE_W4A4_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_ACT_SCALE", 1.0)
@@ -529,6 +530,14 @@ def move_batch_to_device(batch, device):
     if isinstance(batch, dict):
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
+        if CUDA_GRAPH_MAIN_BATCH_FASTPATH and dev.type == "cuda":
+            pred_positions = batch["pred_positions"].view(-1).to(torch.long)
+            moved = dict(batch)
+            moved["_graph_n_original_rows"] = int(batch["logid"].numel())
+            moved["_graph_pred_positions"] = pred_positions.to(dev, non_blocking=True)
+            moved["logid"] = batch["logid"].index_select(0, pred_positions).to(dev, non_blocking=True)
+            moved["pred_mask"] = torch.ones((pred_positions.numel(),), device=dev, dtype=torch.bool)
+            return moved
         return {k: move_batch_to_device(v, device) for k, v in batch.items()}
     elif isinstance(batch, tuple):
         return tuple(move_batch_to_device(x, device) for x in batch)
@@ -2456,6 +2465,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
     Returns:
         (model, device) 元组
     """
+    global CUDA_GRAPH_MAIN_BATCH_FASTPATH
+    CUDA_GRAPH_MAIN_BATCH_FASTPATH = False
+
     emb_dim = 512
     slot_num = 28
     vocab_size = 5000000
@@ -2609,6 +2621,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
                 )
                 model = CudaGraphModelWrapper(model, graph_runner)
                 model.eval()
+                CUDA_GRAPH_MAIN_BATCH_FASTPATH = True
             except RuntimeError as exc:
                 print(f"[WARNING] CUDA Graph setup failed in load_model, falling back to normal model forward: {exc}")
 
@@ -2692,6 +2705,8 @@ def _round_up(value, multiple):
 
 
 def _batch_token_count(batch):
+    if isinstance(batch, dict) and "_graph_n_original_rows" in batch:
+        return int(batch["_graph_n_original_rows"])
     return int(batch["logid"].numel())
 
 
@@ -2831,19 +2846,17 @@ class CudaGraphBatchRunner:
         with torch.no_grad():
             for _ in range(CUDA_GRAPH_WARMUP_ITERS):
                 logits, _ = self.model(static_batch)
-                probs = torch.sigmoid(logits.squeeze(-1))
             torch.cuda.synchronize(self.device)
 
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph):
-                logits, _ = self.model(static_batch)
-                static_probs = torch.sigmoid(logits.squeeze(-1))
+                static_logits, _ = self.model(static_batch)
 
             graph.replay()
             torch.cuda.synchronize(self.device)
 
         runner["graph"] = graph
-        runner["probs"] = static_probs
+        runner["logits"] = static_logits
         print(
             "[INFO] captured CUDA graph bucket "
             f"users={spec['users']}, token_cap={spec['token_cap']}, "
@@ -2858,7 +2871,7 @@ class CudaGraphBatchRunner:
         runner = self.runners[(users, token_cap)]
         self._copy_batch_to_static(runner, batch)
         runner["graph"].replay()
-        return runner["probs"], tokens
+        return runner["logits"], tokens
 
 
 class CudaGraphModelWrapper(nn.Module):
@@ -2868,8 +2881,11 @@ class CudaGraphModelWrapper(nn.Module):
         self.graph_runner = graph_runner
 
     def forward(self, batch):
-        probs, tokens = self.graph_runner.replay(batch)
-        logits = torch.logit(probs[:tokens].clamp(1.0e-6, 1.0 - 1.0e-6)).unsqueeze(-1)
+        logits, tokens = self.graph_runner.replay(batch)
+        logits = logits[:tokens]
+        pred_positions = batch.get("_graph_pred_positions") if isinstance(batch, dict) else None
+        if pred_positions is not None:
+            logits = logits.index_select(0, pred_positions)
         return logits, None
 
     def __getattr__(self, name):
