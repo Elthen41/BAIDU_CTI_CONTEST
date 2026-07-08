@@ -57,6 +57,9 @@ USE_HALF_SCALE_W4A16_SMOE = os.environ.get("USE_HALF_SCALE_W4A16_SMOE", "1") != 
 REQUIRE_CUDA_W4A16_SMOE = os.environ.get("REQUIRE_CUDA_W4A16_SMOE", "1") == "1"
 CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
+USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
+CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
+CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
 W4A16_GROUP_SIZE = _env_positive_int("W4A16_GROUP_SIZE", 128)
 SIMPLE_W4A4_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_ACT_SCALE", 1.0)
@@ -1009,11 +1012,32 @@ class RepEncoder(nn.Module):
             slot_values.append(values.contiguous())
             slot_offsets.append(offsets.contiguous())
 
-        fused_embs = _get_embedding_bag_ext().embedding_bag_28slot_fused(
-            self.emb.weight.contiguous(),
-            slot_values,
-            slot_offsets,
-        )
+        ext = _get_embedding_bag_ext()
+        if (
+            "_slot_value_ptrs" in batch
+            and "_slot_offset_ptrs" in batch
+            and "_graph_active_rows" in batch
+        ):
+            fused_embs = ext.embedding_bag_28slot_fused_with_ptrs_active(
+                self.emb.weight.contiguous(),
+                batch["_slot_value_ptrs"].contiguous(),
+                batch["_slot_offset_ptrs"].contiguous(),
+                int(batch.get("_graph_n_rows", slot_offsets[0].numel() - 1)),
+                batch["_graph_active_rows"].contiguous(),
+            )
+        elif "_slot_value_ptrs" in batch and "_slot_offset_ptrs" in batch:
+            fused_embs = ext.embedding_bag_28slot_fused_with_ptrs(
+                self.emb.weight.contiguous(),
+                batch["_slot_value_ptrs"].contiguous(),
+                batch["_slot_offset_ptrs"].contiguous(),
+                int(batch.get("_graph_n_rows", slot_offsets[0].numel() - 1)),
+            )
+        else:
+            fused_embs = ext.embedding_bag_28slot_fused(
+                self.emb.weight.contiguous(),
+                slot_values,
+                slot_offsets,
+            )
         if USE_CUSTOM_CUDA_REP_NORM:
             if not (
                 self.input_norm.elementwise_affine
@@ -3041,6 +3065,180 @@ def _cal_score(predict_file, label_file, default_latency=0.0):
     }
 
 
+def _round_up(value, multiple):
+    return ((int(value) + multiple - 1) // multiple) * multiple
+
+
+def _batch_token_count(batch):
+    return int(batch["logid"].numel())
+
+
+def _batch_user_count(batch):
+    return int(batch["user_offsets"].numel() - 1)
+
+
+def _ensure_cpu_attention_meta(batch):
+    if "attention_tile_meta_mma" not in batch:
+        batch["attention_tile_meta_mma"] = make_attention_tile_meta(
+            batch["user_offsets"],
+            br=ATTENTION_MMA_BR,
+        )
+    return batch["attention_tile_meta_mma"]
+
+
+def _build_cuda_graph_specs(all_batches, token_bucket):
+    specs = {}
+    for batch in all_batches:
+        ensure_pred_positions(batch)
+        meta = _ensure_cpu_attention_meta(batch)
+        tokens = _batch_token_count(batch)
+        users = _batch_user_count(batch)
+        token_cap = _round_up(tokens, token_bucket)
+        key = (users, token_cap)
+        spec = specs.get(key)
+        if spec is None:
+            spec = {
+                "key": key,
+                "users": users,
+                "token_cap": token_cap,
+                "count": 0,
+                "slot_value_caps": [0] * 29,
+                "meta_cap": 0,
+            }
+            specs[key] = spec
+        spec["count"] += 1
+        spec["meta_cap"] = max(spec["meta_cap"], int(meta.size(0)))
+        for slot in range(1, 29):
+            spec["slot_value_caps"][slot] = max(
+                spec["slot_value_caps"][slot],
+                int(batch[slot][0].numel()),
+            )
+
+    return [specs[key] for key in sorted(specs)]
+
+
+class CudaGraphBatchRunner:
+    def __init__(self, model, device, all_batches, token_bucket=512):
+        self.model = model
+        self.device = torch.device(device)
+        self.token_bucket = int(token_bucket)
+        self.runners = {}
+
+        specs = _build_cuda_graph_specs(all_batches, self.token_bucket)
+        if not specs:
+            raise RuntimeError("no batches available for CUDA graph capture")
+
+        print(
+            "[INFO] CUDA Graph inference enabled: "
+            f"token_bucket={self.token_bucket}, buckets={len(specs)}"
+        )
+        for spec in specs:
+            self.runners[spec["key"]] = self._capture_runner(spec, all_batches)
+
+    def _select_sample_batch(self, spec, all_batches):
+        users, token_cap = spec["key"]
+        for batch in all_batches:
+            tokens = _batch_token_count(batch)
+            if (
+                _batch_user_count(batch) == users
+                and _round_up(tokens, self.token_bucket) == token_cap
+            ):
+                return batch
+        raise RuntimeError(f"missing sample batch for CUDA graph bucket {spec['key']}")
+
+    def _make_static_batch(self, spec):
+        token_cap = spec["token_cap"]
+        users = spec["users"]
+        static_batch = {
+            "user_offsets": torch.empty((users + 1,), device=self.device, dtype=torch.long),
+            "attention_tile_meta_mma": torch.empty(
+                (max(1, spec["meta_cap"]), 4),
+                device=self.device,
+                dtype=torch.int32,
+            ),
+            "_graph_active_rows": torch.empty((1,), device=self.device, dtype=torch.long),
+            "_graph_n_rows": token_cap,
+        }
+
+        for slot in range(1, 29):
+            values_cap = max(1, int(spec["slot_value_caps"][slot]))
+            static_batch[slot] = (
+                torch.empty((values_cap,), device=self.device, dtype=torch.long),
+                torch.empty((token_cap + 1,), device=self.device, dtype=torch.long),
+            )
+
+        static_batch["_slot_value_ptrs"] = torch.tensor(
+            [static_batch[slot][0].data_ptr() for slot in range(1, 29)],
+            device=self.device,
+            dtype=torch.long,
+        )
+        static_batch["_slot_offset_ptrs"] = torch.tensor(
+            [static_batch[slot][1].data_ptr() for slot in range(1, 29)],
+            device=self.device,
+            dtype=torch.long,
+        )
+        return static_batch
+
+    def _copy_batch_to_static(self, runner, batch):
+        static_batch = runner["batch"]
+        tokens = _batch_token_count(batch)
+        meta = _ensure_cpu_attention_meta(batch)
+
+        static_batch["_graph_active_rows"].fill_(tokens)
+        static_batch["user_offsets"].copy_(batch["user_offsets"], non_blocking=True)
+
+        static_meta = static_batch["attention_tile_meta_mma"]
+        static_meta.zero_()
+        if meta.numel() > 0:
+            static_meta[: meta.size(0)].copy_(meta, non_blocking=True)
+
+        for slot in range(1, 29):
+            src_values, src_offsets = batch[slot]
+            dst_values, dst_offsets = static_batch[slot]
+            if src_values.numel() > 0:
+                dst_values[: src_values.numel()].copy_(src_values, non_blocking=True)
+            dst_offsets[: src_offsets.numel()].copy_(src_offsets, non_blocking=True)
+
+    def _capture_runner(self, spec, all_batches):
+        static_batch = self._make_static_batch(spec)
+        runner = {"spec": spec, "batch": static_batch}
+        sample_batch = self._select_sample_batch(spec, all_batches)
+        self._copy_batch_to_static(runner, sample_batch)
+        torch.cuda.synchronize(self.device)
+
+        with torch.inference_mode():
+            for _ in range(CUDA_GRAPH_WARMUP_ITERS):
+                logits, _ = self.model(static_batch)
+                probs = torch.sigmoid(logits.squeeze(-1))
+            torch.cuda.synchronize(self.device)
+
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                logits, _ = self.model(static_batch)
+                static_probs = torch.sigmoid(logits.squeeze(-1))
+
+            graph.replay()
+            torch.cuda.synchronize(self.device)
+
+        runner["graph"] = graph
+        runner["probs"] = static_probs
+        print(
+            "[INFO] captured CUDA graph bucket "
+            f"users={spec['users']}, token_cap={spec['token_cap']}, "
+            f"count={spec['count']}, meta_cap={spec['meta_cap']}"
+        )
+        return runner
+
+    def replay(self, batch):
+        tokens = _batch_token_count(batch)
+        users = _batch_user_count(batch)
+        token_cap = _round_up(tokens, self.token_bucket)
+        runner = self.runners[(users, token_cap)]
+        self._copy_batch_to_static(runner, batch)
+        runner["graph"].replay()
+        return runner["probs"], tokens
+
+
 # ============================================================
 # main：直接运行 infer.py 进行测试
 # ============================================================
@@ -3161,6 +3359,14 @@ def main():
 
     # ----- 加载模型 -----
     model, dev = load_model(ckpt_path=args.ckpt)
+    graph_runner = None
+    if USE_CUDA_GRAPH_INFER and dev.type == "cuda":
+        graph_runner = CudaGraphBatchRunner(
+            model,
+            dev,
+            all_batches,
+            token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
+        )
 
     # ----- 推理 -----
     print('*' * 20 + ' start inference ' + '*' * 20)
@@ -3168,21 +3374,33 @@ def main():
     all_probs = []
     time_sum = 0.0
     t_start = time.time()
-    with torch.no_grad():
+    with torch.inference_mode():
         for batch in tqdm(all_batches, desc="Inference"):
+            if graph_runner is not None:
+                ensure_pred_positions(batch)
+                probs, _ = graph_runner.replay(batch)
+                pred_positions = batch["pred_positions"]
+                if pred_positions.numel() == 0:
+                    continue
+                pred_positions_dev = pred_positions.to(dev, non_blocking=True)
+                masked_probs = probs.index_select(0, pred_positions_dev).cpu().tolist()
+                masked_logids = batch["logid"].index_select(0, pred_positions).tolist()
+                all_logids.extend(masked_logids)
+                all_probs.extend(masked_probs)
+                continue
+
             batch = move_batch_to_device(batch, dev)
             pred_mask = batch["pred_mask"].bool()
-
-            
             logits, moe_loss = model(batch)
             logits = logits.squeeze(-1)
             probs = torch.sigmoid(logits)
-            
 
             masked_logids = batch["logid"][pred_mask].cpu().tolist()
             masked_probs = probs[pred_mask].cpu().tolist()
             all_logids.extend(masked_logids)
             all_probs.extend(masked_probs)
+    if dev.type == "cuda":
+        torch.cuda.synchronize(dev)
     time_sum += time.time() - t_start
     print(f'[INFO] inference time: {round(time_sum, 4)}s')
     print('*' * 20 + ' end inference ' + '*' * 20)

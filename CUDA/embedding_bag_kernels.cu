@@ -150,12 +150,14 @@ __global__ void embedding_bag_28slot_fused_kernel(
     const __half* __restrict__ weight,
     __half* __restrict__ output,
     int64_t n_rows,
+    const int64_t* __restrict__ active_rows,
     int64_t vocab_size
 ) {
     const int64_t row = blockIdx.x;
     const int slot = blockIdx.y;
     const int vec = threadIdx.x;
-    if (row >= n_rows || slot >= kNumSlots || vec >= kVecsPerRow) {
+    const int64_t active = active_rows == nullptr ? n_rows : active_rows[0];
+    if (row >= n_rows || row >= active || slot >= kNumSlots || vec >= kVecsPerRow) {
         return;
     }
 
@@ -202,6 +204,13 @@ torch::Tensor make_pointer_tensor(
         stream.stream()
     ));
     return ptrs;
+}
+
+void check_pointer_tensor(const torch::Tensor& ptrs, const char* name, const torch::Tensor& reference) {
+    check_i64_cuda_contiguous(ptrs, name);
+    check_same_device(ptrs, reference, name, "embedding_weight");
+    TORCH_CHECK(ptrs.dim() == 1, name, " must be 1D");
+    TORCH_CHECK(ptrs.size(0) == kNumSlots, name, " must contain 28 pointers");
 }
 
 }  // namespace
@@ -280,6 +289,75 @@ torch::Tensor embedding_bag_28slot_fused(
         reinterpret_cast<const __half*>(embedding_weight.data_ptr<c10::Half>()),
         reinterpret_cast<__half*>(output.data_ptr<c10::Half>()),
         n_rows,
+        nullptr,
+        embedding_weight.size(0)
+    );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+    return output;
+}
+
+torch::Tensor embedding_bag_28slot_fused_with_ptrs(
+    torch::Tensor embedding_weight,
+    torch::Tensor value_ptrs,
+    torch::Tensor offset_ptrs,
+    int64_t n_rows
+) {
+    check_embedding_weight(embedding_weight);
+    check_pointer_tensor(value_ptrs, "value_ptrs", embedding_weight);
+    check_pointer_tensor(offset_ptrs, "offset_ptrs", embedding_weight);
+    TORCH_CHECK(n_rows >= 0, "n_rows must be non-negative");
+
+    auto output = torch::empty({n_rows, kNumSlots * kEmbDim}, embedding_weight.options());
+    if (n_rows == 0) {
+        return output;
+    }
+
+    const dim3 block(kThreads);
+    const dim3 grid(static_cast<unsigned int>(n_rows), kNumSlots);
+    embedding_bag_28slot_fused_kernel<<<grid, block, 0, at::cuda::getCurrentCUDAStream()>>>(
+        value_ptrs.data_ptr<int64_t>(),
+        offset_ptrs.data_ptr<int64_t>(),
+        reinterpret_cast<const __half*>(embedding_weight.data_ptr<c10::Half>()),
+        reinterpret_cast<__half*>(output.data_ptr<c10::Half>()),
+        n_rows,
+        nullptr,
+        embedding_weight.size(0)
+    );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+
+    return output;
+}
+
+torch::Tensor embedding_bag_28slot_fused_with_ptrs_active(
+    torch::Tensor embedding_weight,
+    torch::Tensor value_ptrs,
+    torch::Tensor offset_ptrs,
+    int64_t output_rows,
+    torch::Tensor active_rows
+) {
+    check_embedding_weight(embedding_weight);
+    check_pointer_tensor(value_ptrs, "value_ptrs", embedding_weight);
+    check_pointer_tensor(offset_ptrs, "offset_ptrs", embedding_weight);
+    check_i64_cuda_contiguous(active_rows, "active_rows");
+    check_same_device(active_rows, embedding_weight, "active_rows", "embedding_weight");
+    TORCH_CHECK(active_rows.dim() == 1 && active_rows.numel() == 1, "active_rows must have shape [1]");
+    TORCH_CHECK(output_rows >= 0, "output_rows must be non-negative");
+
+    auto output = torch::empty({output_rows, kNumSlots * kEmbDim}, embedding_weight.options());
+    if (output_rows == 0) {
+        return output;
+    }
+
+    const dim3 block(kThreads);
+    const dim3 grid(static_cast<unsigned int>(output_rows), kNumSlots);
+    embedding_bag_28slot_fused_kernel<<<grid, block, 0, at::cuda::getCurrentCUDAStream()>>>(
+        value_ptrs.data_ptr<int64_t>(),
+        offset_ptrs.data_ptr<int64_t>(),
+        reinterpret_cast<const __half*>(embedding_weight.data_ptr<c10::Half>()),
+        reinterpret_cast<__half*>(output.data_ptr<c10::Half>()),
+        output_rows,
+        active_rows.data_ptr<int64_t>(),
         embedding_weight.size(0)
     );
     C10_CUDA_KERNEL_LAUNCH_CHECK();
@@ -290,4 +368,14 @@ torch::Tensor embedding_bag_28slot_fused(
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("embedding_bag_slot_sum", &embedding_bag_slot_sum, "Single-slot fp16 embedding bag sum");
     m.def("embedding_bag_28slot_fused", &embedding_bag_28slot_fused, "Fused 28-slot fp16 embedding bag sum");
+    m.def(
+        "embedding_bag_28slot_fused_with_ptrs",
+        &embedding_bag_28slot_fused_with_ptrs,
+        "Graph-safe fused 28-slot fp16 embedding bag sum using prebuilt CUDA pointer tensors"
+    );
+    m.def(
+        "embedding_bag_28slot_fused_with_ptrs_active",
+        &embedding_bag_28slot_fused_with_ptrs_active,
+        "Graph-safe fused 28-slot fp16 embedding bag sum with fixed output rows and device active-row count"
+    );
 }
