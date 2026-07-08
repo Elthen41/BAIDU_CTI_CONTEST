@@ -3408,23 +3408,23 @@ def main():
     all_logids = []
     all_probs = []
     time_sum = 0.0
-    t_start = time.time()
 
     with torch.no_grad():
         for batch in tqdm(all_batches, desc="Inference"):
             batch = move_batch_to_device(batch, dev)
             pred_mask = batch["pred_mask"].bool()
 
+            t_start = time.time()
             logits, moe_loss = model(batch)
             logits = logits.squeeze(-1)
             probs = torch.sigmoid(logits)
+            time_sum += time.time() - t_start
 
             masked_logids = batch["logid"][pred_mask].cpu().tolist()
             masked_probs = probs[pred_mask].cpu().tolist()
             all_logids.extend(masked_logids)
             all_probs.extend(masked_probs)
 
-    time_sum += time.time() - t_start
     print(f'[INFO] inference time: {round(time_sum, 4)}s')
     print('*' * 20 + ' end inference ' + '*' * 20)
 
