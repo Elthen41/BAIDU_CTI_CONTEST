@@ -1,20 +1,10 @@
 import math
 import argparse
-import builtins
 import importlib
 import os
 import sys
 from pathlib import Path
 from collections import defaultdict
-
-
-_STDOUT_PRINT = builtins.print
-PRINT_LOGS = os.environ.get("CTI_PRINT", "0").lower() in {"1", "true", "yes", "on"}
-
-
-def print(*args, **kwargs):
-    if PRINT_LOGS or sys._getframe(1).f_code.co_name == "main":
-        _STDOUT_PRINT(*args, **kwargs)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -66,10 +56,10 @@ USE_HALF_SCALE_W4A16_SMOE = os.environ.get("USE_HALF_SCALE_W4A16_SMOE", "1") != 
 REQUIRE_CUDA_W4A16_SMOE = os.environ.get("REQUIRE_CUDA_W4A16_SMOE", "1") == "1"
 CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
-USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "0") != "0"
+USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
+USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
-CUDA_GRAPH_MAIN_BATCH_FASTPATH = False
 ATTENTION_MMA_BR = 16
 W4A16_GROUP_SIZE = _env_positive_int("W4A16_GROUP_SIZE", 128)
 SIMPLE_W4A4_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_ACT_SCALE", 1.0)
@@ -107,11 +97,12 @@ _ROUTED_SMOE_EXT = None
 _EMBEDDING_BAG_EXT = None
 _GATE_TOPK_EXT = None
 _OUTPUT_EXT = None
+_ACTIVE_CUDA_GRAPH_RUNNER = None
 
 
 def _load_prebuilt_cuda_ext(name):
     if os.environ.get("USE_PREBUILT_CUDA_EXT", "1") == "0":
-        raise RuntimeError("USE_PREBUILT_CUDA_EXT=0 is no longer supported; run build_env.sh first")
+        raise RuntimeError("USE_PREBUILT_CUDA_EXT=0 is not supported; run build_env.sh first")
     if CMAKE_EXTENSIONS_DIR.exists():
         path = str(CMAKE_EXTENSIONS_DIR)
         if path not in sys.path:
@@ -123,6 +114,266 @@ def _load_prebuilt_cuda_ext(name):
             f"prebuilt CUDA extension {name!r} was not importable from {CMAKE_EXTENSIONS_DIR}; "
             "run build_env.sh before infer.py"
         ) from exc
+
+
+def _attention_tiled_cuda_flags():
+    config = {}
+    if os.environ.get("USE_FAST_ATTENTION_EXP", "0") != "0":
+        config["USE_FAST_ATTENTION_EXP"] = 1
+    if config:
+        summary = ", ".join(f"{key}={value}" for key, value in config.items())
+        print(f"[INFO] using attention compile config: {summary}")
+    return [f"-D{key}={value}" for key, value in config.items()]
+
+
+def _routed_smoe_cuda_flags():
+    flags = []
+    maxrregcount = os.environ.get("SMOE_MAXRREGCOUNT", "80")
+    try:
+        parsed = int(maxrregcount)
+    except ValueError as exc:
+        raise RuntimeError(f"SMOE_MAXRREGCOUNT must be an integer, got {maxrregcount!r}") from exc
+    if parsed <= 0:
+        raise RuntimeError(f"SMOE_MAXRREGCOUNT must be positive, got {parsed}")
+    print(f"[INFO] using routed SMoE compile config: SMOE_MAXRREGCOUNT={parsed}")
+    flags.append(f"--maxrregcount={parsed}")
+    if USE_CUTLASS_SMOE:
+        print("[INFO] enabling CUTLASS SMoE fc2-only compile path")
+        flags.append("-DBAIDU_CTI_ENABLE_CUTLASS_SMOE=1")
+    return flags
+
+
+def _cutlass_include_paths():
+    cutlass_root = Path(os.environ.get("CUTLASS_ROOT", SCRIPT_DIR / "third_party" / "cutlass")).expanduser()
+    if not cutlass_root.is_absolute():
+        cutlass_root = (Path.cwd() / cutlass_root).resolve()
+    else:
+        cutlass_root = cutlass_root.resolve()
+
+    include_dir = cutlass_root / "include"
+    util_include_dir = cutlass_root / "tools" / "util" / "include"
+    if not include_dir.exists() or not util_include_dir.exists():
+        if USE_CUTLASS_SMOE:
+            raise FileNotFoundError(
+                "CUTLASS include directories not found. Checked:\n"
+                f"  - {include_dir}\n"
+                f"  - {util_include_dir}"
+            )
+        return []
+    return [str(include_dir), str(util_include_dir)]
+
+
+def _resolve_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_NORM_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "norm_kernels.cu",
+        SCRIPT_DIR / "norm_kernels.cu",
+        Path.cwd() / "CUDA" / "norm_kernels.cu",
+        Path.cwd() / "norm_kernels.cu",
+        Path.home() / "code" / "CUDA" / "norm_kernels.cu",
+        Path.home() / "code" / "norm_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source norm_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
+
+
+def _resolve_attention_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_ATTENTION_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "attention_kernels.cu",
+        Path.cwd() / "CUDA" / "attention_kernels.cu",
+        Path.home() / "code" / "CUDA" / "attention_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source attention_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
+
+
+def _resolve_routed_smoe_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_ROUTED_SMOE_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "smoe_kernels.cu",
+        Path.cwd() / "CUDA" / "smoe_kernels.cu",
+        Path.home() / "code" / "CUDA" / "smoe_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source smoe_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
+
+
+def _resolve_embedding_bag_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_EMBEDDING_BAG_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "embedding_bag_kernels.cu",
+        Path.cwd() / "CUDA" / "embedding_bag_kernels.cu",
+        Path.home() / "code" / "CUDA" / "embedding_bag_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source embedding_bag_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
+
+
+def _resolve_gate_topk_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_GATE_TOPK_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "softmax_topk_kernels.cu",
+        Path.cwd() / "CUDA" / "softmax_topk_kernels.cu",
+        Path.home() / "code" / "CUDA" / "softmax_topk_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source softmax_topk_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
+
+
+def _resolve_output_cuda_src():
+    env_cuda_src = os.environ.get("CUDA_OUTPUT_SRC")
+    candidates = []
+    if env_cuda_src:
+        candidates.append(Path(env_cuda_src))
+
+    candidates.extend([
+        SCRIPT_DIR / "CUDA" / "output_kernels.cu",
+        Path.cwd() / "CUDA" / "output_kernels.cu",
+        Path.home() / "code" / "CUDA" / "output_kernels.cu",
+    ])
+
+    seen = set()
+    checked = []
+    for path in candidates:
+        path = path.expanduser()
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path in seen:
+            continue
+        seen.add(path)
+        checked.append(path)
+
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(
+        "Custom CUDA source output_kernels.cu not found. Checked:\n"
+        + "\n".join(f"  - {path}" for path in checked)
+    )
 
 
 def _get_layernorm_ext():
@@ -528,16 +779,19 @@ def make_collate_fn(max_slot_id):
 def move_batch_to_device(batch, device):
     dev = torch.device(device)
     if isinstance(batch, dict):
+        graph_runner = _ACTIVE_CUDA_GRAPH_RUNNER
+        if (
+            USE_CUDA_GRAPH_PRELOAD_IN_MOVE
+            and graph_runner is not None
+            and dev.type == "cuda"
+            and "_cuda_graph_staged_runner" not in batch
+        ):
+            staged_batch = graph_runner.stage_batch_or_none(batch)
+            if staged_batch is not None:
+                return staged_batch
+
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
-        if CUDA_GRAPH_MAIN_BATCH_FASTPATH and dev.type == "cuda":
-            pred_positions = batch["pred_positions"].view(-1).to(torch.long)
-            moved = dict(batch)
-            moved["_graph_n_original_rows"] = int(batch["logid"].numel())
-            moved["_graph_pred_positions"] = pred_positions.to(dev, non_blocking=True)
-            moved["logid"] = batch["logid"].index_select(0, pred_positions).to(dev, non_blocking=True)
-            moved["pred_mask"] = torch.ones((pred_positions.numel(),), device=dev, dtype=torch.bool)
-            return moved
         return {k: move_batch_to_device(v, device) for k, v in batch.items()}
     elif isinstance(batch, tuple):
         return tuple(move_batch_to_device(x, device) for x in batch)
@@ -1720,6 +1974,15 @@ class CTRModel(nn.Module):
         return encoder_output, moe_loss
 
     def forward(self, batch):
+        graph_runner = getattr(self, "_cuda_graph_runner", None)
+        if graph_runner is not None and not getattr(self, "_cuda_graph_forward_disabled", False):
+            graph_logits = graph_runner.replay_logits_or_none(batch)
+            if graph_logits is not None:
+                return graph_logits, None
+
+        return self._forward_eager(batch)
+
+    def _forward_eager(self, batch):
         encoder_output, moe_loss = self.encode(batch)
         if (
             self.linear.weight.is_cuda
@@ -2451,6 +2714,136 @@ def _resolve_ckpt_path(ckpt_path=None):
     return unique_candidates[0], unique_candidates
 
 
+def _is_graph_batch_sequence(value):
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) > 0
+        and isinstance(value[0], dict)
+        and "logid" in value[0]
+        and "user_offsets" in value[0]
+    )
+
+
+def _find_graph_batches_from_caller():
+    if os.environ.get("CUDA_GRAPH_USE_CALLER_BATCHES", "1") == "0":
+        return None, None
+
+    import inspect
+
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back
+        fallback = None
+        while frame is not None:
+            batches = frame.f_locals.get("all_batches")
+            if _is_graph_batch_sequence(batches):
+                return batches, "caller local all_batches"
+            for name, value in frame.f_locals.items():
+                if name == "all_batches":
+                    continue
+                if not _is_graph_batch_sequence(value):
+                    continue
+                if fallback is None or len(value) > len(fallback[0]):
+                    fallback = (value, f"caller local {name}")
+            frame = frame.f_back
+    finally:
+        del frame
+
+    if fallback is not None:
+        return fallback
+
+    return None, None
+
+
+def _cached_batch_dir_candidates():
+    candidates = []
+    env_cache_dir = os.environ.get("CUDA_GRAPH_BATCH_CACHE_DIR")
+    if env_cache_dir:
+        candidates.append(Path(env_cache_dir))
+
+    candidates.extend([
+        SCRIPT_DIR / "code" / "dataset" / "cached_batches",
+        SCRIPT_DIR / "dataset" / "cached_batches",
+        Path.cwd() / "code" / "dataset" / "cached_batches",
+        Path.cwd() / "dataset" / "cached_batches",
+        Path.home() / "code" / "dataset" / "cached_batches",
+    ])
+    return candidates
+
+
+def _load_graph_batches_from_cache():
+    if os.environ.get("CUDA_GRAPH_USE_BATCH_CACHE", "1") == "0":
+        return None, None
+
+    seen = set()
+    for cache_dir in _cached_batch_dir_candidates():
+        cache_dir = cache_dir.expanduser()
+        if not cache_dir.is_absolute():
+            cache_dir = (Path.cwd() / cache_dir).resolve()
+        else:
+            cache_dir = cache_dir.resolve()
+        if cache_dir in seen:
+            continue
+        seen.add(cache_dir)
+
+        if not cache_dir.exists():
+            continue
+
+        shard_files = sorted(
+            cache_dir.glob("shard_*.pt"),
+            key=lambda p: int(p.stem.split("_")[1]),
+        )
+        if not shard_files:
+            continue
+
+        print(f"[INFO] loading CUDA Graph batch specs from cached shards: {cache_dir}")
+        all_batches = []
+        for shard_path in shard_files:
+            all_batches.extend(torch.load(shard_path, map_location="cpu", weights_only=False))
+        if _is_graph_batch_sequence(all_batches):
+            return all_batches, f"cached batch shards at {cache_dir}"
+
+    return None, None
+
+
+def _attach_cuda_graph_runner_to_model(model, dev):
+    global _ACTIVE_CUDA_GRAPH_RUNNER
+
+    if not USE_CUDA_GRAPH_INFER or dev.type != "cuda":
+        return None
+
+    existing = getattr(model, "_cuda_graph_runner", None)
+    if existing is not None:
+        _ACTIVE_CUDA_GRAPH_RUNNER = existing
+        return existing
+
+    all_batches, source = _find_graph_batches_from_caller()
+    if all_batches is None:
+        all_batches, source = _load_graph_batches_from_cache()
+
+    if all_batches is None:
+        print("[WARNING] CUDA Graph inference requested, but no all_batches/cache was available in load_model")
+        return None
+
+    try:
+        runner = CudaGraphBatchRunner(
+            model,
+            dev,
+            all_batches,
+            token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
+        )
+    except Exception as exc:
+        if os.environ.get("REQUIRE_CUDA_GRAPH_INFER", "0") == "1":
+            raise
+        print(f"[WARNING] CUDA Graph capture failed in load_model, falling back to eager forward: {exc}")
+        return None
+
+    model._cuda_graph_runner = runner
+    _ACTIVE_CUDA_GRAPH_RUNNER = runner
+    print(f"[INFO] Bound CUDA Graph runner to model.forward from {source}")
+    return runner
+
+
 # ============================================================
 # 模型加载入口
 # ============================================================
@@ -2465,9 +2858,6 @@ def load_model(ckpt_path=None, device='cuda:0'):
     Returns:
         (model, device) 元组
     """
-    global CUDA_GRAPH_MAIN_BATCH_FASTPATH
-    CUDA_GRAPH_MAIN_BATCH_FASTPATH = False
-
     emb_dim = 512
     slot_num = 28
     vocab_size = 5000000
@@ -2609,21 +2999,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
             print("[INFO] Using custom CUDA routed sparse SMoE")
         print("[INFO] Using custom CUDA routed sparse SMoE residual-add fusion")
 
-    if USE_CUDA_GRAPH_INFER and dev.type == "cuda":
-        graph_batches = _load_cached_batches_for_graph()
-        if graph_batches:
-            try:
-                graph_runner = CudaGraphBatchRunner(
-                    model,
-                    dev,
-                    graph_batches,
-                    token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
-                )
-                model = CudaGraphModelWrapper(model, graph_runner)
-                model.eval()
-                CUDA_GRAPH_MAIN_BATCH_FASTPATH = True
-            except RuntimeError as exc:
-                print(f"[WARNING] CUDA Graph setup failed in load_model, falling back to normal model forward: {exc}")
+    _attach_cuda_graph_runner_to_model(model, dev)
 
     return model, dev
 
@@ -2705,8 +3081,6 @@ def _round_up(value, multiple):
 
 
 def _batch_token_count(batch):
-    if isinstance(batch, dict) and "_graph_n_original_rows" in batch:
-        return int(batch["_graph_n_original_rows"])
     return int(batch["logid"].numel())
 
 
@@ -2760,6 +3134,7 @@ class CudaGraphBatchRunner:
         self.device = torch.device(device)
         self.token_bucket = int(token_bucket)
         self.runners = {}
+        self._fallback_warned = False
 
         specs = _build_cuda_graph_specs(all_batches, self.token_bucket)
         if not specs:
@@ -2771,6 +3146,43 @@ class CudaGraphBatchRunner:
         )
         for spec in specs:
             self.runners[spec["key"]] = self._capture_runner(spec, all_batches)
+
+    def _model_forward_eager(self, batch):
+        if hasattr(self.model, "_forward_eager"):
+            return self.model._forward_eager(batch)
+
+        old_disabled = getattr(self.model, "_cuda_graph_forward_disabled", False)
+        self.model._cuda_graph_forward_disabled = True
+        try:
+            return self.model(batch)
+        finally:
+            self.model._cuda_graph_forward_disabled = old_disabled
+
+    def _lookup_runner(self, batch):
+        tokens = _batch_token_count(batch)
+        users = _batch_user_count(batch)
+        token_cap = _round_up(tokens, self.token_bucket)
+        return self.runners.get((users, token_cap)), tokens
+
+    def _batch_fits_runner(self, runner, batch):
+        if runner is None:
+            return False
+
+        spec = runner["spec"]
+        meta = _ensure_cpu_attention_meta(batch)
+        if int(meta.size(0)) > int(spec["meta_cap"]):
+            return False
+
+        for slot in range(1, 29):
+            if int(batch[slot][0].numel()) > int(spec["slot_value_caps"][slot]):
+                return False
+        return True
+
+    def _warn_fallback_once(self, reason):
+        if self._fallback_warned:
+            return
+        self._fallback_warned = True
+        print(f"[WARNING] CUDA Graph replay skipped for at least one batch; eager forward fallback enabled ({reason})")
 
     def _select_sample_batch(self, spec, all_batches):
         users, token_cap = spec["key"]
@@ -2787,6 +3199,8 @@ class CudaGraphBatchRunner:
         token_cap = spec["token_cap"]
         users = spec["users"]
         static_batch = {
+            "logid": torch.empty((token_cap,), device=self.device, dtype=torch.long),
+            "pred_mask": torch.empty((token_cap,), device=self.device, dtype=torch.bool),
             "user_offsets": torch.empty((users + 1,), device=self.device, dtype=torch.long),
             "attention_tile_meta_mma": torch.empty(
                 (max(1, spec["meta_cap"]), 4),
@@ -2822,6 +3236,10 @@ class CudaGraphBatchRunner:
         meta = _ensure_cpu_attention_meta(batch)
 
         static_batch["_graph_active_rows"].fill_(tokens)
+        if "logid" in batch:
+            static_batch["logid"][:tokens].copy_(batch["logid"], non_blocking=True)
+        if "pred_mask" in batch:
+            static_batch["pred_mask"][:tokens].copy_(batch["pred_mask"], non_blocking=True)
         static_batch["user_offsets"].copy_(batch["user_offsets"], non_blocking=True)
 
         static_meta = static_batch["attention_tile_meta_mma"]
@@ -2845,12 +3263,12 @@ class CudaGraphBatchRunner:
 
         with torch.no_grad():
             for _ in range(CUDA_GRAPH_WARMUP_ITERS):
-                logits, _ = self.model(static_batch)
+                logits, _ = self._model_forward_eager(static_batch)
             torch.cuda.synchronize(self.device)
 
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph):
-                static_logits, _ = self.model(static_batch)
+                static_logits, _ = self._model_forward_eager(static_batch)
 
             graph.replay()
             torch.cuda.synchronize(self.device)
@@ -2865,68 +3283,58 @@ class CudaGraphBatchRunner:
         return runner
 
     def replay(self, batch):
-        tokens = _batch_token_count(batch)
-        users = _batch_user_count(batch)
-        token_cap = _round_up(tokens, self.token_bucket)
-        runner = self.runners[(users, token_cap)]
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            raise RuntimeError("CUDA Graph bucket missing or undersized for current batch")
         self._copy_batch_to_static(runner, batch)
         runner["graph"].replay()
-        return runner["logits"], tokens
+        return torch.sigmoid(runner["logits"].squeeze(-1)), tokens
 
+    def stage_batch_or_none(self, batch):
+        if not (
+            isinstance(batch, dict)
+            and "logid" in batch
+            and "pred_mask" in batch
+            and "user_offsets" in batch
+        ):
+            return None
 
-class CudaGraphModelWrapper(nn.Module):
-    def __init__(self, model, graph_runner):
-        super().__init__()
-        self.model = model
-        self.graph_runner = graph_runner
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            return None
 
-    def forward(self, batch):
-        logits, tokens = self.graph_runner.replay(batch)
-        logits = logits[:tokens]
-        pred_positions = batch.get("_graph_pred_positions") if isinstance(batch, dict) else None
-        if pred_positions is not None:
-            logits = logits.index_select(0, pred_positions)
-        return logits, None
+        self._copy_batch_to_static(runner, batch)
+        static_batch = runner["batch"]
+        return {
+            "logid": static_batch["logid"][:tokens],
+            "pred_mask": static_batch["pred_mask"][:tokens],
+            "_cuda_graph_owner": self,
+            "_cuda_graph_staged_runner": runner,
+            "_cuda_graph_tokens": tokens,
+        }
 
-    def __getattr__(self, name):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.model, name)
+    def replay_logits_or_none(self, batch):
+        if isinstance(batch, dict) and batch.get("_cuda_graph_owner") is self:
+            runner = batch.get("_cuda_graph_staged_runner")
+            tokens = int(batch.get("_cuda_graph_tokens", 0))
+            if runner is not None and tokens > 0:
+                runner["graph"].replay()
+                logits = runner["logits"]
+                if logits.size(0) != tokens:
+                    logits = logits[:tokens]
+                return logits
 
+        runner, tokens = self._lookup_runner(batch)
+        if not self._batch_fits_runner(runner, batch):
+            self._warn_fallback_once("missing bucket or undersized static buffers")
+            return None
 
-def _resolve_dataset_dir_for_judge():
-    candidates = [
-        SCRIPT_DIR / "dataset",
-        SCRIPT_DIR / "code" / "dataset",
-        Path.cwd() / "dataset",
-        Path.cwd() / "code" / "dataset",
-    ]
-    for candidate in candidates:
-        if (candidate / "cached_batches").exists() or (candidate / "test.csv").exists():
-            return candidate
-    return candidates[0]
-
-
-def _load_cached_batches_for_graph():
-    ref_dir = _resolve_dataset_dir_for_judge()
-    batches_cache_dir = ref_dir / "cached_batches"
-    shard_files = sorted(
-        batches_cache_dir.glob("shard_*.pt"),
-        key=lambda p: int(p.stem.split("_")[1]),
-    )
-    if not shard_files:
-        print(f"[INFO] CUDA Graph preload skipped: no cached batch shards under {batches_cache_dir}")
-        return None
-
-    print(f"[INFO] preloading cached batch shards for CUDA Graph from {batches_cache_dir}")
-    all_batches = []
-    for sf in shard_files:
-        shard_batches = torch.load(sf, weights_only=False)
-        all_batches.extend(shard_batches)
-        print(f"[INFO] preloaded {len(shard_batches)} batches from {sf.name}")
-    print(f"[INFO] preloaded {len(all_batches)} cached batches for CUDA Graph capture")
-    return all_batches
+        self._copy_batch_to_static(runner, batch)
+        runner["graph"].replay()
+        logits = runner["logits"]
+        if logits.size(0) != tokens:
+            logits = logits[:tokens]
+        return logits
 
 
 # ============================================================
@@ -3024,6 +3432,7 @@ def main():
     print('[INFO] data loading done')
 
     # ----- 加载模型 -----
+
     model, dev = load_model(ckpt_path=args.ckpt)
 
     # ----- 推理 -----
