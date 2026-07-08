@@ -3,6 +3,20 @@ cmake_minimum_required(VERSION 3.13)
 project(baidu_cti_cuda_extensions LANGUAGES CXX CUDA)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# CUDA 12+ no longer ships the legacy nvToolsExt library in the same form, but
+# some PyTorch CMake packages still expose torch::nvtoolsext with a link
+# dependency on CUDA::nvToolsExt.  Provide a harmless imported interface target
+# before find_package(Torch) so CMake generation works with those packages.
+if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0 AND NOT TARGET CUDA::nvToolsExt)
+  add_library(CUDA::nvToolsExt INTERFACE IMPORTED)
+  if(CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES)
+    set_target_properties(CUDA::nvToolsExt PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}"
+    )
+  endif()
+endif()
+
 find_package(Torch REQUIRED)
 
 find_library(TORCH_PYTHON_LIBRARY torch_python PATHS "${TORCH_INSTALL_PREFIX}/lib")

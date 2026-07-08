@@ -58,6 +58,7 @@ CHECK_W4A16_SMOE = os.environ.get("CHECK_W4A16_SMOE", "0") == "1"
 PROFILE_INFERENCE_RANGE = os.environ.get("PROFILE_INFERENCE_RANGE", "0") == "1"
 USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
+USE_MINIMAL_BATCH_H2D = os.environ.get("USE_MINIMAL_BATCH_H2D", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 ATTENTION_MMA_BR = 16
@@ -791,8 +792,17 @@ def move_batch_to_device(batch, device):
                 return staged_batch
 
         ensure_attention_tile_meta(batch)
-        ensure_pred_positions(batch)
-        return {k: move_batch_to_device(v, device) for k, v in batch.items()}
+        if not USE_MINIMAL_BATCH_H2D:
+            ensure_pred_positions(batch)
+
+        skip_keys = {"label", "userid"}
+        if USE_MINIMAL_BATCH_H2D:
+            skip_keys.add("pred_positions")
+        return {
+            k: move_batch_to_device(v, device)
+            for k, v in batch.items()
+            if k not in skip_keys
+        }
     elif isinstance(batch, tuple):
         return tuple(move_batch_to_device(x, device) for x in batch)
     elif isinstance(batch, list):
