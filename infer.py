@@ -67,6 +67,7 @@ USE_JUDGE_DROP_EMPTY_PRED_BATCHES = os.environ.get("USE_JUDGE_DROP_EMPTY_PRED_BA
 USE_JUDGE_REARRANGE_BATCHES = os.environ.get("USE_JUDGE_REARRANGE_BATCHES", "1") != "0"
 USE_CUDA_GRAPH_STATIC_PREFETCH = os.environ.get("USE_CUDA_GRAPH_STATIC_PREFETCH", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
+CUDA_GRAPH_USER_BUCKET = _env_positive_int("CUDA_GRAPH_USER_BUCKET", 32)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 JUDGE_BATCH_AGGREGATION_SIZE = _env_positive_int("JUDGE_BATCH_AGGREGATION_SIZE", 32)
 JUDGE_BATCH_AGGREGATION_MAX_TOKENS = _env_positive_int("JUDGE_BATCH_AGGREGATION_MAX_TOKENS", 16384)
@@ -893,7 +894,6 @@ def _aggregate_caller_all_batches():
         fused_batches.append(_fuse_inference_batches(group))
     for batch in fused_batches:
         ensure_pred_positions(batch)
-        prepare_fixed_loop_pred_only_output(batch)
     all_batches[:] = fused_batches
     return True
 
@@ -3059,6 +3059,7 @@ def _attach_cuda_graph_runner_to_model(model, dev):
             dev,
             all_batches,
             token_bucket=CUDA_GRAPH_TOKEN_BUCKET,
+            user_bucket=CUDA_GRAPH_USER_BUCKET,
         )
     except Exception as exc:
         if os.environ.get("REQUIRE_CUDA_GRAPH_INFER", "0") == "1":
@@ -3202,15 +3203,10 @@ def load_model(ckpt_path=None, device='cuda:0'):
             pass
         pass
 
-    aggregated_batches = _aggregate_caller_all_batches()
-    if not aggregated_batches:
-        _attach_cuda_graph_runner_to_model(model, dev)
+    _aggregate_caller_all_batches()
+    _attach_cuda_graph_runner_to_model(model, dev)
     _prepin_caller_all_batches()
-    if aggregated_batches:
-        global _ACTIVE_JUDGE_BATCH_PREFETCHER
-        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
-    else:
-        _install_judge_move_prefetcher(dev)
+    _install_judge_move_prefetcher(dev)
 
     return model, dev
 
@@ -3292,6 +3288,9 @@ def _round_up(value, multiple):
 
 
 def _batch_token_count(batch):
+    user_offsets = batch.get("user_offsets")
+    if torch.is_tensor(user_offsets) and user_offsets.numel() > 0:
+        return int(user_offsets.view(-1)[-1].item())
     return int(batch["logid"].numel())
 
 
@@ -3308,7 +3307,7 @@ def _ensure_cpu_attention_meta(batch):
     return batch["attention_tile_meta_mma"]
 
 
-def _build_cuda_graph_specs(all_batches, token_bucket):
+def _build_cuda_graph_specs(all_batches, token_bucket, user_bucket):
     specs = {}
     for batch in all_batches:
         ensure_pred_positions(batch)
@@ -3316,12 +3315,13 @@ def _build_cuda_graph_specs(all_batches, token_bucket):
         tokens = _batch_token_count(batch)
         users = _batch_user_count(batch)
         token_cap = _round_up(tokens, token_bucket)
-        key = (users, token_cap)
+        users_cap = _round_up(users, user_bucket)
+        key = (users_cap, token_cap)
         spec = specs.get(key)
         if spec is None:
             spec = {
                 "key": key,
-                "users": users,
+                "users_cap": users_cap,
                 "token_cap": token_cap,
                 "count": 0,
                 "slot_value_caps": [0] * 29,
@@ -3340,10 +3340,11 @@ def _build_cuda_graph_specs(all_batches, token_bucket):
 
 
 class CudaGraphBatchRunner:
-    def __init__(self, model, device, all_batches, token_bucket=512):
+    def __init__(self, model, device, all_batches, token_bucket=512, user_bucket=32):
         self.model = model
         self.device = torch.device(device)
         self.token_bucket = int(token_bucket)
+        self.user_bucket = int(user_bucket)
         self.runners = {}
         self._fallback_warned = False
         self._graph_prefetch_enabled = False
@@ -3352,7 +3353,7 @@ class CudaGraphBatchRunner:
         self._graph_prefetch_batch_ids = {}
         self._graph_prefetched = {}
 
-        specs = _build_cuda_graph_specs(all_batches, self.token_bucket)
+        specs = _build_cuda_graph_specs(all_batches, self.token_bucket, self.user_bucket)
         if not specs:
             raise RuntimeError("no batches available for CUDA graph capture")
 
@@ -3375,13 +3376,18 @@ class CudaGraphBatchRunner:
         tokens = _batch_token_count(batch)
         users = _batch_user_count(batch)
         token_cap = _round_up(tokens, self.token_bucket)
-        return self.runners.get((users, token_cap)), tokens
+        users_cap = _round_up(users, self.user_bucket)
+        return self.runners.get((users_cap, token_cap)), tokens
 
     def _batch_fits_runner(self, runner, batch):
         if runner is None:
             return False
 
         spec = runner["spec"]
+        if _batch_user_count(batch) > int(spec["users_cap"]):
+            return False
+        if _batch_token_count(batch) > int(spec["token_cap"]):
+            return False
         meta = _ensure_cpu_attention_meta(batch)
         if int(meta.size(0)) > int(spec["meta_cap"]):
             return False
@@ -3398,11 +3404,11 @@ class CudaGraphBatchRunner:
         pass
 
     def _select_sample_batch(self, spec, all_batches):
-        users, token_cap = spec["key"]
+        users_cap, token_cap = spec["key"]
         for batch in all_batches:
             tokens = _batch_token_count(batch)
             if (
-                _batch_user_count(batch) == users
+                _round_up(_batch_user_count(batch), self.user_bucket) == users_cap
                 and _round_up(tokens, self.token_bucket) == token_cap
             ):
                 return batch
@@ -3410,11 +3416,11 @@ class CudaGraphBatchRunner:
 
     def _make_static_batch(self, spec):
         token_cap = spec["token_cap"]
-        users = spec["users"]
+        users_cap = spec["users_cap"]
         static_batch = {
             "logid": torch.empty((token_cap,), device=self.device, dtype=torch.long),
             "pred_mask": torch.empty((token_cap,), device=self.device, dtype=torch.bool),
-            "user_offsets": torch.empty((users + 1,), device=self.device, dtype=torch.long),
+            "user_offsets": torch.empty((users_cap + 1,), device=self.device, dtype=torch.long),
             "attention_tile_meta_mma": torch.empty(
                 (max(1, spec["meta_cap"]), 4),
                 device=self.device,
@@ -3453,7 +3459,11 @@ class CudaGraphBatchRunner:
             static_batch["logid"][:tokens].copy_(batch["logid"], non_blocking=True)
         if "pred_mask" in batch:
             static_batch["pred_mask"][:tokens].copy_(batch["pred_mask"], non_blocking=True)
-        static_batch["user_offsets"].copy_(batch["user_offsets"], non_blocking=True)
+        static_batch["user_offsets"].fill_(tokens)
+        static_batch["user_offsets"][: batch["user_offsets"].numel()].copy_(
+            batch["user_offsets"],
+            non_blocking=True,
+        )
 
         static_meta = static_batch["attention_tile_meta_mma"]
         static_meta.zero_()
