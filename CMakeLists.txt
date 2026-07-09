@@ -43,6 +43,7 @@ endif()
 set(CTI_INSTALL_DIR "${CMAKE_SOURCE_DIR}/cmake_extensions" CACHE PATH "Directory for built Python extension modules")
 set(CTI_SMOE_MAXRREGCOUNT "80" CACHE STRING "CUDA max register count for routed SMoE kernels")
 set(CTI_ENABLE_CUTLASS_SMOE "0" CACHE STRING "Enable CUTLASS SMoE compile path")
+set(CTI_BUILD_DENSE_ALL_SMOE "0" CACHE STRING "Build optional dense-all SMoE experiment extension")
 set(CTI_USE_FAST_ATTENTION_EXP "0" CACHE STRING "Use __expf in attention kernels")
 set(CTI_CUTLASS_ROOT "${CMAKE_SOURCE_DIR}/third_party/cutlass" CACHE PATH "CUTLASS root")
 set(PYTHON_INCLUDE_DIR "" CACHE PATH "Python include directory from sysconfig")
@@ -76,10 +77,13 @@ endfunction()
 add_cti_extension(layernorm_512_ext CUDA/norm_kernels.cu)
 add_cti_extension(varlen_attention_ext CUDA/attention_kernels.cu)
 add_cti_extension(routed_smoe_ext CUDA/smoe_kernels.cu)
-add_cti_extension(dense_all_smoe_ext CUDA/dense_all_smoe_kernels.cu)
 add_cti_extension(embedding_bag_ext CUDA/embedding_bag_kernels.cu)
 add_cti_extension(gate_topk_ext CUDA/softmax_topk_kernels.cu)
 add_cti_extension(output_ext CUDA/output_kernels.cu)
+
+if(CTI_BUILD_DENSE_ALL_SMOE)
+  add_cti_extension(dense_all_smoe_ext CUDA/dense_all_smoe_kernels.cu)
+endif()
 
 target_compile_definitions(varlen_attention_ext PRIVATE
   USE_FAST_ATTENTION_EXP=${CTI_USE_FAST_ATTENTION_EXP}
