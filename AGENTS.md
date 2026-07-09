@@ -14,7 +14,7 @@ format, and metric calculation.
 
 - The submitted archive must include at least `infer.py`, `build_env.sh`, and
   `requirements.txt`.
-- The judge first runs `build_env.sh`, then runs `infer.py`.
+- The judge first runs `./build_env.sh`, then runs `python infer.py`. No cli args or flags will take effect.
 - The judge uses a fixed `main()` equivalent to `infer_baseline.py`.
 - Treat changes to `main()` in local `infer.py` as debug-only; they will not
   affect judging.
@@ -22,6 +22,7 @@ format, and metric calculation.
   argument. Other current `infer.py` CLI flags are local diagnostics only.
 - Do not rely on local paths such as `code/dataset` for judged behavior unless
   the fixed baseline-compatible `main()` can reach the same files.
+- Judge system will record best scores, so no need to worry new method will cause worse results. Just set every new features to default on.
 
 ## Optimization Targets
 
@@ -34,6 +35,12 @@ format, and metric calculation.
   fixed judge `main()`.
 - Prefer default-on optimizations with environment-variable emergency fallbacks
   for risky CUDA paths.
+
+## Official Hints and Conventions
+
+![Official Notice](./violations_list.md) has 2 sections:
+- Section 1 are rules that we must obey.
+- Section 2 are recommended optimization methods.
 
 ## CUDA Build Direction
 
