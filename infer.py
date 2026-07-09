@@ -46,8 +46,6 @@ USE_INTERLEAVED_QKV_ATTENTION = os.environ.get("USE_INTERLEAVED_QKV_ATTENTION", 
 USE_INTERLEAVED_QKV_ATTENTION_TOKEN_MAJOR_OUT = os.environ.get("USE_INTERLEAVED_QKV_ATTENTION_TOKEN_MAJOR_OUT", "1") != "0"
 USE_M64_SMOE = os.environ.get("USE_M64_SMOE", "0") != "0"
 USE_CUTLASS_SMOE = os.environ.get("USE_CUTLASS_SMOE", "0") != "0"
-USE_W8A8_SMOE = os.environ.get("USE_W8A8_SMOE", "1") != "0"
-USE_W8A8_DENSE = os.environ.get("USE_W8A8_DENSE", "1") != "0"
 USE_SIMPLE_W4A4_SMOE = os.environ.get("USE_SIMPLE_W4A4_SMOE", "1") != "0"
 USE_SIMPLE_W4A4_FC1_SMOE = os.environ.get("USE_SIMPLE_W4A4_FC1_SMOE", "0") != "0"
 USE_W4A16_SMOE = os.environ.get("USE_W4A16_SMOE", "0") != "0"
@@ -63,13 +61,12 @@ USE_CUDA_GRAPH_INFER = os.environ.get("USE_CUDA_GRAPH_INFER", "1") != "0"
 USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE", "1") != "0"
 USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") != "0"
 USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "1") != "0"
+USE_JUDGE_BATCH_AGGREGATION = os.environ.get("USE_JUDGE_BATCH_AGGREGATION", "1") != "0"
 USE_CUDA_GRAPH_STATIC_PREFETCH = os.environ.get("USE_CUDA_GRAPH_STATIC_PREFETCH", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
+JUDGE_BATCH_AGGREGATION_SIZE = _env_positive_int("JUDGE_BATCH_AGGREGATION_SIZE", 3)
 ATTENTION_MMA_BR = 16
-W8A8_ACT_EPS = _env_positive_float("W8A8_ACT_EPS", 1e-6)
-W8A8_INT_MM_PAD_M = _env_positive_int("W8A8_INT_MM_PAD_M", 16)
-REQUIRE_INT_MM_W8A8_SMOE = os.environ.get("REQUIRE_INT_MM_W8A8_SMOE", "0") == "1"
 W4A16_GROUP_SIZE = _env_positive_int("W4A16_GROUP_SIZE", 128)
 SIMPLE_W4A4_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_ACT_SCALE", 1.0)
 SIMPLE_W4A4_FC1_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_FC1_ACT_SCALE", SIMPLE_W4A4_ACT_SCALE)
@@ -734,6 +731,108 @@ def pin_all_batches_memory(all_batches):
         raise RuntimeError(f"pin_memory failed; optimized inference requires pinned CPU batches: {exc}") from exc
 
 
+def _make_empty_skip_batch_like(batch):
+    device = batch["logid"].device if torch.is_tensor(batch.get("logid")) else torch.device("cpu")
+    result = {
+        "_aggregate_skip": True,
+        "userid": torch.empty((0,), dtype=torch.long, device=device),
+        "logid": torch.empty((0,), dtype=torch.long, device=device),
+        "label": torch.empty((0,), dtype=torch.float32, device=device),
+        "pred_mask": torch.empty((0,), dtype=torch.bool, device=device),
+        "pred_positions": torch.empty((0,), dtype=torch.long, device=device),
+        "user_offsets": torch.zeros((1,), dtype=torch.long, device=device),
+        "attention_tile_meta_mma": torch.empty((0, 4), dtype=torch.int32, device=device),
+    }
+    for slot in range(1, 29):
+        result[slot] = (
+            torch.empty((0,), dtype=torch.long, device=device),
+            torch.zeros((1,), dtype=torch.long, device=device),
+        )
+    return result
+
+
+def _concat_1d_tensors(batches, key):
+    return torch.cat([batch[key].view(-1) for batch in batches], dim=0).contiguous()
+
+
+def _fuse_user_offsets(batches):
+    offsets = [torch.zeros((1,), dtype=torch.long, device=batches[0]["user_offsets"].device)]
+    token_base = 0
+    for batch in batches:
+        user_offsets = batch["user_offsets"].view(-1).to(torch.long)
+        if user_offsets.numel() <= 1:
+            continue
+        offsets.append(user_offsets[1:] + token_base)
+        token_base += int(user_offsets[-1].item())
+    return torch.cat(offsets, dim=0).contiguous()
+
+
+def _fuse_slot_tuple(batches, slot):
+    values = []
+    offsets = [torch.zeros((1,), dtype=torch.long, device=batches[0][slot][1].device)]
+    value_base = 0
+    for batch in batches:
+        slot_values, slot_offsets = batch[slot]
+        values.append(slot_values.view(-1))
+        slot_offsets = slot_offsets.view(-1).to(torch.long)
+        if slot_offsets.numel() > 1:
+            offsets.append(slot_offsets[1:] + value_base)
+        value_base += int(slot_offsets[-1].item()) if slot_offsets.numel() else 0
+    if values:
+        fused_values = torch.cat(values, dim=0).contiguous()
+    else:
+        fused_values = torch.empty((0,), dtype=torch.long, device=batches[0][slot][0].device)
+    fused_offsets = torch.cat(offsets, dim=0).contiguous()
+    return fused_values, fused_offsets
+
+
+def _fuse_inference_batches(batches):
+    if len(batches) == 1:
+        ensure_attention_tile_meta(batches[0])
+        ensure_pred_positions(batches[0])
+        return batches[0]
+
+    user_offsets = _fuse_user_offsets(batches)
+    pred_mask = _concat_1d_tensors(batches, "pred_mask").to(torch.bool)
+    fused = {
+        "_aggregate_size": len(batches),
+        "userid": _concat_1d_tensors(batches, "userid").to(torch.long),
+        "logid": _concat_1d_tensors(batches, "logid").to(torch.long),
+        "label": _concat_1d_tensors(batches, "label").to(torch.float32),
+        "pred_mask": pred_mask,
+        "pred_positions": pred_mask.nonzero(as_tuple=False).view(-1).to(torch.long),
+        "user_offsets": user_offsets,
+        "attention_tile_meta_mma": make_attention_tile_meta(user_offsets, br=ATTENTION_MMA_BR),
+    }
+    for slot in range(1, 29):
+        fused[slot] = _fuse_slot_tuple(batches, slot)
+    return fused
+
+
+def _aggregate_caller_all_batches():
+    if not USE_JUDGE_BATCH_AGGREGATION or JUDGE_BATCH_AGGREGATION_SIZE <= 1:
+        return False
+
+    all_batches = _find_caller_all_batches()
+    if not _looks_like_inference_batches(all_batches):
+        return False
+    if any(
+        isinstance(batch, dict)
+        and (batch.get("_aggregate_skip", False) or "_aggregate_size" in batch)
+        for batch in all_batches
+    ):
+        return False
+
+    original = list(all_batches)
+    for start in range(0, len(original), JUDGE_BATCH_AGGREGATION_SIZE):
+        group = original[start:start + JUDGE_BATCH_AGGREGATION_SIZE]
+        fused = _fuse_inference_batches(group)
+        all_batches[start] = fused
+        for idx in range(start + 1, min(start + JUDGE_BATCH_AGGREGATION_SIZE, len(original))):
+            all_batches[idx] = _make_empty_skip_batch_like(original[idx])
+    return True
+
+
 def make_collate_fn(max_slot_id):
     def collate_user_batch(batch):
         all_userids = []
@@ -1000,9 +1099,6 @@ class RepEncoder(nn.Module):
         self.input_norm = nn.LayerNorm(slot_num * emb_dim)
         self.linear = nn.Linear(in_features=slot_num * emb_dim, out_features=d_model)
 
-    def prepare_w8a8_linear(self):
-        _register_w8a8_linear_buffers(self, "rep_linear", self.linear)
-
     def forward(self, batch):
         if not (
             self.emb.weight.is_cuda
@@ -1072,7 +1168,7 @@ class RepEncoder(nn.Module):
             )
         else:
             norm_emb = self.input_norm(fused_embs)
-        rep_emb = _linear_w8a8_or_fp16(self, "rep_linear", self.linear, norm_emb)
+        rep_emb = self.linear(norm_emb)
         return rep_emb
 
 
@@ -1251,107 +1347,6 @@ def _w4a16_linear_reference(x, weight_dequant, bias):
     return F.linear(x, weight_dequant.to(dtype=x.dtype), bias)
 
 
-def _w8a8_quantize_weight(weight):
-    if weight.dim() != 2:
-        raise RuntimeError(f"W8A8 weight must be 2D, got shape={tuple(weight.shape)}")
-
-    weight_float = weight.detach().float()
-    scale = (weight_float.abs().amax(dim=1) / 127.0).clamp_min(W8A8_ACT_EPS)
-    qweight = torch.round(weight_float / scale.unsqueeze(1)).clamp_(-127, 127).to(torch.int8)
-    qweight_t = qweight.t().contiguous()
-    return qweight_t, scale.contiguous()
-
-
-def _w8a8_dequantize_weight(qweight_t, scale, dtype):
-    return (qweight_t.t().float() * scale.float().unsqueeze(1)).to(dtype=dtype).contiguous()
-
-
-def _w8a8_quantize_activation(x):
-    scale = (x.detach().float().abs().amax() / 127.0).clamp_min(W8A8_ACT_EPS)
-    qx = torch.round(x.float() / scale).clamp_(-127, 127).to(torch.int8).contiguous()
-    return qx, scale
-
-
-def _w8a8_int_mm(qx, qweight_t):
-    if not hasattr(torch, "_int_mm"):
-        raise RuntimeError("torch._int_mm is unavailable")
-    if qx.dim() != 2 or qweight_t.dim() != 2:
-        raise RuntimeError("W8A8 int_mm expects qx [M,K] and qweight_t [K,N]")
-    if qx.size(1) != qweight_t.size(0):
-        raise RuntimeError(
-            f"W8A8 int_mm shape mismatch: qx={tuple(qx.shape)}, qweight_t={tuple(qweight_t.shape)}"
-        )
-
-    rows = qx.size(0)
-    pad_rows = (-rows) % W8A8_INT_MM_PAD_M
-    if pad_rows:
-        qx_mm = F.pad(qx, (0, 0, 0, pad_rows))
-    else:
-        qx_mm = qx
-    out = torch._int_mm(qx_mm, qweight_t)
-    if pad_rows:
-        out = out[:rows]
-    return out
-
-
-def _w8a8_linear(x, qweight_t, scale, bias):
-    qx, x_scale = _w8a8_quantize_activation(x)
-    try:
-        out_i32 = _w8a8_int_mm(qx, qweight_t)
-        out = out_i32.float() * (x_scale.float() * scale.float()).unsqueeze(0)
-    except RuntimeError:
-        if REQUIRE_INT_MM_W8A8_SMOE:
-            raise
-        weight_dequant = _w8a8_dequantize_weight(qweight_t, scale, x.dtype)
-        return F.linear(x, weight_dequant, bias)
-    if bias is not None:
-        out = out + bias.float().unsqueeze(0)
-    return out.to(dtype=x.dtype)
-
-
-def _register_w8a8_linear_buffers(owner, prefix, linear):
-    weight_name = f"_{prefix}_w8_t"
-    scale_name = f"_{prefix}_w8_scale"
-    bias_name = f"_{prefix}_w8_bias"
-    if hasattr(owner, weight_name) and hasattr(owner, scale_name) and hasattr(owner, bias_name):
-        return
-
-    qweight_t, scale = _w8a8_quantize_weight(linear.weight)
-    owner.register_buffer(weight_name, qweight_t, persistent=False)
-    owner.register_buffer(scale_name, scale, persistent=False)
-    if linear.bias is None:
-        owner.register_buffer(bias_name, torch.empty(0, device=linear.weight.device, dtype=linear.weight.dtype), persistent=False)
-    else:
-        owner.register_buffer(bias_name, linear.bias.detach().contiguous(), persistent=False)
-
-
-def _linear_w8a8_or_fp16(owner, prefix, linear, x):
-    if not USE_W8A8_DENSE:
-        return linear(x)
-
-    weight_name = f"_{prefix}_w8_t"
-    scale_name = f"_{prefix}_w8_scale"
-    bias_name = f"_{prefix}_w8_bias"
-    if not (hasattr(owner, weight_name) and hasattr(owner, scale_name) and hasattr(owner, bias_name)):
-        _register_w8a8_linear_buffers(owner, prefix, linear)
-
-    if not (x.is_cuda and x.dtype == torch.float16):
-        return linear(x)
-
-    orig_shape = x.shape
-    x_2d = x.reshape(-1, orig_shape[-1]).contiguous()
-    bias = getattr(owner, bias_name)
-    if bias.numel() == 0:
-        bias = None
-    out = _w8a8_linear(
-        x_2d,
-        getattr(owner, weight_name).contiguous(),
-        getattr(owner, scale_name).contiguous(),
-        bias,
-    )
-    return out.reshape(*orig_shape[:-1], linear.out_features)
-
-
 def _simple_w4a4_pack_weight_uniform(weight, scale):
     if weight.dim() != 3 or weight.size(0) != 8 or weight.size(2) % 8 != 0:
         raise RuntimeError(
@@ -1391,9 +1386,6 @@ class TopKGate(nn.Module):
         self.k = k
         self.noisy_gating = noisy_gating
 
-    def prepare_w8a8_weight(self):
-        _register_w8a8_linear_buffers(self, "gate", self.w_g)
-
     def forward(self, x):
         # x: [B,S,D]
         if self.training:
@@ -1411,7 +1403,7 @@ class TopKGate(nn.Module):
         ):
             raise RuntimeError("TopKGate requires CUDA fp16 Linear(512->8) and top-2 custom CUDA softmax")
 
-        logits = _linear_w8a8_or_fp16(self, "gate", self.w_g, x)  # [B,S,E]
+        logits = self.w_g(x)  # [B,S,E]
         if logits.size(-1) != 8:
             raise RuntimeError(f"custom CUDA gate top2 softmax requires last dim 8, got {logits.size(-1)}")
         topk_idx, topk_score = _get_gate_topk_ext().top2_softmax_8(logits.contiguous())
@@ -1497,42 +1489,6 @@ class SMoE(nn.Module):
             persistent=False,
         )
         self._simple_w4a4_weight_scale_value = weight_scale
-
-    def prepare_w8a8_weights(self):
-        if (
-            hasattr(self, "_w8_w1_t")
-            and hasattr(self, "_w8_w1_scale")
-            and hasattr(self, "_w8_b1")
-            and hasattr(self, "_w8_w2_t")
-            and hasattr(self, "_w8_w2_scale")
-            and hasattr(self, "_w8_b2")
-        ):
-            return
-
-        self.gate.prepare_w8a8_weight()
-
-        w1_t = []
-        w1_scale = []
-        b1 = []
-        w2_t = []
-        w2_scale = []
-        b2 = []
-        for expert in self.experts:
-            q1_t, s1 = _w8a8_quantize_weight(expert.fc1.weight)
-            q2_t, s2 = _w8a8_quantize_weight(expert.fc2.weight)
-            w1_t.append(q1_t)
-            w1_scale.append(s1)
-            b1.append(expert.fc1.bias.detach().contiguous())
-            w2_t.append(q2_t)
-            w2_scale.append(s2)
-            b2.append(expert.fc2.bias.detach().contiguous())
-
-        self.register_buffer("_w8_w1_t", torch.stack(w1_t, dim=0).contiguous(), persistent=False)
-        self.register_buffer("_w8_w1_scale", torch.stack(w1_scale, dim=0).contiguous(), persistent=False)
-        self.register_buffer("_w8_b1", torch.stack(b1, dim=0).contiguous(), persistent=False)
-        self.register_buffer("_w8_w2_t", torch.stack(w2_t, dim=0).contiguous(), persistent=False)
-        self.register_buffer("_w8_w2_scale", torch.stack(w2_scale, dim=0).contiguous(), persistent=False)
-        self.register_buffer("_w8_b2", torch.stack(b2, dim=0).contiguous(), persistent=False)
 
     def prepare_w4a16_weights(self):
         if (
@@ -1757,77 +1713,6 @@ class SMoE(nn.Module):
             )
         return out.reshape(B, S, D)
 
-    def _forward_w8a8_reference(self, x, topk_idx, topk_score):
-        self.prepare_w8a8_weights()
-
-        B, S, D = x.shape
-        x_flat = x.reshape(-1, D)
-        idx_flat = topk_idx.reshape(-1, self.k)
-        score_flat = topk_score.reshape(-1, self.k)
-        out_flat = torch.zeros(
-            (x_flat.size(0), D),
-            device=x.device,
-            dtype=torch.float32,
-        )
-
-        for expert_idx in range(self.num_experts):
-            token_idx, route_idx = (idx_flat == expert_idx).nonzero(as_tuple=True)
-            if token_idx.numel() == 0:
-                continue
-
-            selected_x = x_flat.index_select(0, token_idx).contiguous()
-            hidden = _w8a8_linear(
-                selected_x,
-                self._w8_w1_t[expert_idx].contiguous(),
-                self._w8_w1_scale[expert_idx].contiguous(),
-                self._w8_b1[expert_idx],
-            )
-            hidden = F.relu(hidden)
-            expert_out = _w8a8_linear(
-                hidden.contiguous(),
-                self._w8_w2_t[expert_idx].contiguous(),
-                self._w8_w2_scale[expert_idx].contiguous(),
-                self._w8_b2[expert_idx],
-            )
-            route_weight = score_flat[token_idx, route_idx].float().unsqueeze(-1)
-            out_flat.index_add_(0, token_idx, expert_out.float() * route_weight)
-
-        return out_flat.reshape(B, S, D).to(dtype=x.dtype)
-
-    def _forward_w8a8_reference_with_residual(self, x, residual, topk_idx, topk_score):
-        self.prepare_w8a8_weights()
-
-        B, S, D = x.shape
-        x_flat = x.reshape(-1, D)
-        residual_flat = residual.reshape(-1, D)
-        idx_flat = topk_idx.reshape(-1, self.k)
-        score_flat = topk_score.reshape(-1, self.k)
-        out_flat = residual_flat.float().clone()
-
-        for expert_idx in range(self.num_experts):
-            token_idx, route_idx = (idx_flat == expert_idx).nonzero(as_tuple=True)
-            if token_idx.numel() == 0:
-                continue
-
-            selected_x = x_flat.index_select(0, token_idx).contiguous()
-            hidden = _w8a8_linear(
-                selected_x,
-                self._w8_w1_t[expert_idx].contiguous(),
-                self._w8_w1_scale[expert_idx].contiguous(),
-                self._w8_b1[expert_idx],
-            )
-            hidden = F.relu(hidden)
-            expert_out = _w8a8_linear(
-                hidden.contiguous(),
-                self._w8_w2_t[expert_idx].contiguous(),
-                self._w8_w2_scale[expert_idx].contiguous(),
-                self._w8_b2[expert_idx],
-            )
-            route_weight = score_flat[token_idx, route_idx].float().unsqueeze(-1)
-            out_flat.index_add_(0, token_idx, expert_out.float() * route_weight)
-
-        return out_flat.reshape(B, S, D).to(dtype=x.dtype)
-
     def _forward_w4a16_cuda(self, x, topk_idx, topk_score):
         self.prepare_w4a16_weights()
 
@@ -1990,12 +1875,7 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
-        if USE_W8A8_SMOE:
-            if not hasattr(self, "_printed_w8a8_smoe"):
-                pass
-                self._printed_w8a8_smoe = True
-            out = self._forward_w8a8_reference(x, topk_idx, topk_score)
-        elif USE_SIMPLE_W4A4_SMOE:
+        if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe"):
                 pass
@@ -2045,13 +1925,6 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse residual path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
-        if USE_W8A8_SMOE:
-            if not hasattr(self, "_printed_w8a8_smoe_residual"):
-                pass
-                self._printed_w8a8_smoe_residual = True
-            out = self._forward_w8a8_reference_with_residual(x, residual, topk_idx, topk_score)
-            return out, x.new_zeros(())
-
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe_residual"):
@@ -2201,15 +2074,6 @@ class TransformerEncoder(nn.Module):
         for moe in self.moe:
             moe.prepare_dense_all()
 
-    def prepare_w8a8_dense(self):
-        for i in range(self.num_layers):
-            _register_w8a8_linear_buffers(self, f"qkv_{i}", self.qkv_proj[i])
-            _register_w8a8_linear_buffers(self, f"out_{i}", self.out_proj[i])
-
-    def prepare_w8a8_smoe(self):
-        for moe in self.moe:
-            moe.prepare_w8a8_weights()
-
     def prepare_w4a16_smoe(self):
         for moe in self.moe:
             moe.prepare_w4a16_weights()
@@ -2226,7 +2090,7 @@ class TransformerEncoder(nn.Module):
         for i in range(self.num_layers):
             residual = x
             x = self.norm1[i](x)
-            qkv = _linear_w8a8_or_fp16(self, f"qkv_{i}", self.qkv_proj[i], x)
+            qkv = self.qkv_proj[i](x)
             qkv = qkv.view(B, S, self.n_heads, 3 * self.head_dim)
             interleaved_attn_out = scaled_dot_product_interleaved_qkv(qkv, extension)
             if interleaved_attn_out is not None:
@@ -2239,7 +2103,7 @@ class TransformerEncoder(nn.Module):
                 q, k, v = torch.split(qkv, self.head_dim, dim=-1)
                 attn_out = self.attention_fn(q, k, v, extension)
                 attn_out = attn_out.permute(0, 2, 1, 3).reshape(B, S, D)
-            attn_proj = _linear_w8a8_or_fp16(self, f"out_{i}", self.out_proj[i], attn_out)
+            attn_proj = self.out_proj[i](attn_out)
             if hasattr(self.norm2[i], "add_layernorm_with_residual"):
                 residual, x = self.norm2[i].add_layernorm_with_residual(residual, attn_proj)
             else:
@@ -2308,6 +2172,14 @@ class CTRModel(nn.Module):
         return encoder_output, moe_loss
 
     def forward(self, batch):
+        if isinstance(batch, dict) and batch.get("_aggregate_skip", False):
+            logits = torch.empty(
+                (0, 1),
+                device=self.linear.weight.device,
+                dtype=self.linear.weight.dtype,
+            )
+            return logits, None
+
         graph_runner = getattr(self, "_cuda_graph_runner", None)
         if graph_runner is not None and not getattr(self, "_cuda_graph_forward_disabled", False):
             graph_logits = graph_runner.replay_logits_or_none(batch)
@@ -2489,30 +2361,8 @@ def _warmup_custom_output(model, device, dtype=torch.float16):
     torch.cuda.synchronize(dev)
 
 
-def _warmup_custom_w8a8_dense(model, device, dtype=torch.float16):
-    if not USE_W8A8_DENSE:
-        return
-
-    dev = torch.device(device)
-    if dev.type != "cuda" or dtype != torch.float16:
-        return
-
-    with torch.no_grad():
-        rep_x = torch.randn((W8A8_INT_MM_PAD_M, 28 * 512), device=dev, dtype=dtype) * 0.125
-        _linear_w8a8_or_fp16(model.rep_encoder, "rep_linear", model.rep_encoder.linear, rep_x)
-
-        seq = model.seq_encoder
-        x = torch.randn((1, W8A8_INT_MM_PAD_M, 512), device=dev, dtype=dtype) * 0.125
-        qkv = _linear_w8a8_or_fp16(seq, "qkv_0", seq.qkv_proj[0], x)
-        attn_out = qkv[..., :512].reshape(1, W8A8_INT_MM_PAD_M, 512).contiguous()
-        _linear_w8a8_or_fp16(seq, "out_0", seq.out_proj[0], attn_out)
-        seq.moe[0].gate.prepare_w8a8_weight()
-        _linear_w8a8_or_fp16(seq.moe[0].gate, "gate", seq.moe[0].gate.w_g, x)
-    torch.cuda.synchronize(dev)
-
-
 def _warmup_custom_routed_smoe(model, device, dtype=torch.float16):
-    if USE_W8A8_SMOE or USE_SIMPLE_W4A4_SMOE or USE_W4A16_SMOE:
+    if USE_SIMPLE_W4A4_SMOE or USE_W4A16_SMOE:
         return
 
     dev = torch.device(device)
@@ -2572,45 +2422,8 @@ def _warmup_custom_routed_smoe(model, device, dtype=torch.float16):
     torch.cuda.synchronize(dev)
 
 
-def _warmup_custom_w8a8_smoe(model, device, dtype=torch.float16):
-    if not USE_W8A8_SMOE:
-        return
-
-    dev = torch.device(device)
-    if dev.type != "cuda" or dtype != torch.float16:
-        return
-
-    moe = model.seq_encoder.moe[0]
-    if not (
-        hasattr(moe, "_w8_w1_t")
-        and hasattr(moe, "_w8_w1_scale")
-        and hasattr(moe, "_w8_b1")
-        and hasattr(moe, "_w8_w2_t")
-        and hasattr(moe, "_w8_w2_scale")
-        and hasattr(moe, "_w8_b2")
-    ):
-        return
-
-    with torch.no_grad():
-        n_tokens = max(W8A8_INT_MM_PAD_M, 8)
-        x = torch.randn((n_tokens, 512), device=dev, dtype=dtype) * 0.125
-        hidden = _w8a8_linear(
-            x,
-            moe._w8_w1_t[0].contiguous(),
-            moe._w8_w1_scale[0].contiguous(),
-            moe._w8_b1[0],
-        )
-        _w8a8_linear(
-            F.relu(hidden).contiguous(),
-            moe._w8_w2_t[0].contiguous(),
-            moe._w8_w2_scale[0].contiguous(),
-            moe._w8_b2[0],
-        )
-    torch.cuda.synchronize(dev)
-
-
 def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
-    if USE_W8A8_SMOE or not USE_SIMPLE_W4A4_SMOE:
+    if not USE_SIMPLE_W4A4_SMOE:
         return
 
     dev = torch.device(device)
@@ -2682,7 +2495,7 @@ def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
 
 
 def _warmup_custom_w4a16_smoe(device, dtype=torch.float16):
-    if USE_W8A8_SMOE or USE_SIMPLE_W4A4_SMOE or not (USE_W4A16_SMOE and USE_CUDA_W4A16_SMOE):
+    if USE_SIMPLE_W4A4_SMOE or not (USE_W4A16_SMOE and USE_CUDA_W4A16_SMOE):
         return
 
     dev = torch.device(device)
@@ -3236,16 +3049,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
     model.to(dev)
     model.half()
     pass
-    if USE_W8A8_DENSE:
-        model.rep_encoder.prepare_w8a8_linear()
-        model.seq_encoder.prepare_w8a8_dense()
-        pass
     model.seq_encoder.prepare_dense_all_smoe()
     pass
-    if USE_W8A8_SMOE:
-        model.seq_encoder.prepare_w8a8_smoe()
-        pass
-    elif USE_SIMPLE_W4A4_SMOE:
+    if USE_SIMPLE_W4A4_SMOE:
         model.seq_encoder.prepare_simple_w4a4_smoe()
         pass
     elif USE_W4A16_SMOE:
@@ -3256,11 +3062,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
     _warmup_custom_embedding_bag(model, dev, dtype=model_dtype)
     _warmup_custom_gate_topk(dev, dtype=model_dtype)
     _warmup_custom_output(model, dev, dtype=model_dtype)
-    _warmup_custom_w8a8_dense(model, dev, dtype=model_dtype)
     _warmup_custom_layernorm(dev, dtype=model_dtype)
     _warmup_custom_attention(dev, dtype=model_dtype)
     _warmup_custom_routed_smoe(model, dev, dtype=model_dtype)
-    _warmup_custom_w8a8_smoe(model, dev, dtype=model_dtype)
     _warmup_custom_simple_w4a4_smoe(model, dev, dtype=model_dtype)
     _warmup_custom_w4a16_smoe(dev, dtype=model_dtype)
     _check_w4a16_smoe_weights(model)
@@ -3290,9 +3094,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
             pass
         else:
             pass
-    if USE_W8A8_SMOE:
-        pass
-    elif USE_SIMPLE_W4A4_SMOE:
+    if USE_SIMPLE_W4A4_SMOE:
         pass
         pass
     elif USE_W4A16_SMOE:
@@ -3318,9 +3120,15 @@ def load_model(ckpt_path=None, device='cuda:0'):
             pass
         pass
 
-    _attach_cuda_graph_runner_to_model(model, dev)
+    aggregated_batches = _aggregate_caller_all_batches()
+    if not aggregated_batches:
+        _attach_cuda_graph_runner_to_model(model, dev)
     _prepin_caller_all_batches()
-    _install_judge_move_prefetcher(dev)
+    if aggregated_batches:
+        global _ACTIVE_JUDGE_BATCH_PREFETCHER
+        _ACTIVE_JUDGE_BATCH_PREFETCHER = None
+    else:
+        _install_judge_move_prefetcher(dev)
 
     return model, dev
 
