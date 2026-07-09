@@ -63,6 +63,8 @@ USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") !
 USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "1") != "0"
 USE_JUDGE_BATCH_AGGREGATION = os.environ.get("USE_JUDGE_BATCH_AGGREGATION", "1") != "0"
 USE_JUDGE_PRED_ONLY_OUTPUT = os.environ.get("USE_JUDGE_PRED_ONLY_OUTPUT", "1") != "0"
+USE_JUDGE_DROP_EMPTY_PRED_BATCHES = os.environ.get("USE_JUDGE_DROP_EMPTY_PRED_BATCHES", "1") != "0"
+USE_JUDGE_REARRANGE_BATCHES = os.environ.get("USE_JUDGE_REARRANGE_BATCHES", "1") != "0"
 USE_CUDA_GRAPH_STATIC_PREFETCH = os.environ.get("USE_CUDA_GRAPH_STATIC_PREFETCH", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
@@ -782,6 +784,16 @@ def _batch_n_tokens(batch):
     return 0
 
 
+def _batch_n_preds(batch):
+    pred_positions = batch.get("pred_positions")
+    if torch.is_tensor(pred_positions):
+        return int(pred_positions.numel())
+    pred_mask = batch.get("pred_mask")
+    if torch.is_tensor(pred_mask):
+        return int(pred_mask.view(-1).bool().sum().item())
+    return 0
+
+
 def _fuse_user_offsets(batches):
     offsets = [torch.zeros((1,), dtype=torch.long, device=batches[0]["user_offsets"].device)]
     token_base = 0
@@ -854,6 +866,15 @@ def _aggregate_caller_all_batches():
         return False
 
     original = list(all_batches)
+    for batch in original:
+        ensure_pred_positions(batch)
+
+    if USE_JUDGE_DROP_EMPTY_PRED_BATCHES:
+        original = [batch for batch in original if _batch_n_preds(batch) > 0]
+
+    if USE_JUDGE_REARRANGE_BATCHES:
+        original.sort(key=lambda batch: (_batch_n_tokens(batch), _batch_n_preds(batch)), reverse=True)
+
     fused_batches = []
     group = []
     group_tokens = 0
@@ -870,6 +891,9 @@ def _aggregate_caller_all_batches():
         group_tokens += n_tokens
     if group:
         fused_batches.append(_fuse_inference_batches(group))
+    for batch in fused_batches:
+        ensure_pred_positions(batch)
+        prepare_fixed_loop_pred_only_output(batch)
     all_batches[:] = fused_batches
     return True
 
