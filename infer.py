@@ -62,10 +62,12 @@ USE_CUDA_GRAPH_PRELOAD_IN_MOVE = os.environ.get("USE_CUDA_GRAPH_PRELOAD_IN_MOVE"
 USE_JUDGE_LOADMODEL_PREPIN = os.environ.get("USE_JUDGE_LOADMODEL_PREPIN", "1") != "0"
 USE_JUDGE_MOVE_PREFETCH = os.environ.get("USE_JUDGE_MOVE_PREFETCH", "1") != "0"
 USE_JUDGE_BATCH_AGGREGATION = os.environ.get("USE_JUDGE_BATCH_AGGREGATION", "1") != "0"
+USE_JUDGE_PRED_ONLY_OUTPUT = os.environ.get("USE_JUDGE_PRED_ONLY_OUTPUT", "1") != "0"
 USE_CUDA_GRAPH_STATIC_PREFETCH = os.environ.get("USE_CUDA_GRAPH_STATIC_PREFETCH", "1") != "0"
 CUDA_GRAPH_TOKEN_BUCKET = _env_positive_int("CUDA_GRAPH_TOKEN_BUCKET", 128)
 CUDA_GRAPH_WARMUP_ITERS = _env_positive_int("CUDA_GRAPH_WARMUP_ITERS", 1)
 JUDGE_BATCH_AGGREGATION_SIZE = _env_positive_int("JUDGE_BATCH_AGGREGATION_SIZE", 32)
+JUDGE_BATCH_AGGREGATION_MAX_TOKENS = _env_positive_int("JUDGE_BATCH_AGGREGATION_MAX_TOKENS", 16384)
 ATTENTION_MMA_BR = 16
 W4A16_GROUP_SIZE = _env_positive_int("W4A16_GROUP_SIZE", 128)
 SIMPLE_W4A4_ACT_SCALE = _env_positive_float("SIMPLE_W4A4_ACT_SCALE", 1.0)
@@ -703,6 +705,41 @@ def ensure_pred_positions(batch):
     return False
 
 
+def prepare_fixed_loop_pred_only_output(batch):
+    if (
+        not USE_JUDGE_PRED_ONLY_OUTPUT
+        or not isinstance(batch, dict)
+        or batch.get("_fixed_loop_pred_only", False)
+        or "logid" not in batch
+        or "pred_mask" not in batch
+        or "pred_positions" not in batch
+        or not torch.is_tensor(batch["logid"])
+        or not torch.is_tensor(batch["pred_positions"])
+    ):
+        return False
+
+    pred_positions = batch["pred_positions"].view(-1).to(dtype=torch.long)
+    logid = batch["logid"].view(-1)
+    if pred_positions.numel() == 0:
+        batch["logid"] = logid.new_empty((0,))
+        batch["pred_mask"] = torch.empty((0,), dtype=torch.bool, device=logid.device)
+        if torch.is_tensor(batch.get("label")):
+            batch["label"] = batch["label"].view(-1).new_empty((0,))
+        batch["_no_pred_skip"] = True
+        batch["_fixed_loop_pred_only"] = True
+        return True
+
+    if logid.numel() != pred_positions.numel():
+        batch["logid"] = logid.index_select(0, pred_positions.to(device=logid.device))
+    batch["pred_mask"] = torch.ones((pred_positions.numel(),), dtype=torch.bool, device=logid.device)
+    if torch.is_tensor(batch.get("label")) and batch["label"].numel() != pred_positions.numel():
+        label = batch["label"].view(-1)
+        batch["label"] = label.index_select(0, pred_positions.to(device=label.device))
+    batch["_gather_pred_only"] = True
+    batch["_fixed_loop_pred_only"] = True
+    return True
+
+
 def pin_batch_memory(batch):
     if isinstance(batch, dict):
         return {k: pin_batch_memory(v) for k, v in batch.items()}
@@ -731,28 +768,18 @@ def pin_all_batches_memory(all_batches):
         raise RuntimeError(f"pin_memory failed; optimized inference requires pinned CPU batches: {exc}") from exc
 
 
-def _make_empty_skip_batch_like(batch):
-    device = batch["logid"].device if torch.is_tensor(batch.get("logid")) else torch.device("cpu")
-    result = {
-        "_aggregate_skip": True,
-        "userid": torch.empty((0,), dtype=torch.long, device=device),
-        "logid": torch.empty((0,), dtype=torch.long, device=device),
-        "label": torch.empty((0,), dtype=torch.float32, device=device),
-        "pred_mask": torch.empty((0,), dtype=torch.bool, device=device),
-        "pred_positions": torch.empty((0,), dtype=torch.long, device=device),
-        "user_offsets": torch.zeros((1,), dtype=torch.long, device=device),
-        "attention_tile_meta_mma": torch.empty((0, 4), dtype=torch.int32, device=device),
-    }
-    for slot in range(1, 29):
-        result[slot] = (
-            torch.empty((0,), dtype=torch.long, device=device),
-            torch.zeros((1,), dtype=torch.long, device=device),
-        )
-    return result
-
-
 def _concat_1d_tensors(batches, key):
     return torch.cat([batch[key].view(-1) for batch in batches], dim=0).contiguous()
+
+
+def _batch_n_tokens(batch):
+    user_offsets = batch.get("user_offsets")
+    if torch.is_tensor(user_offsets) and user_offsets.numel() > 0:
+        return int(user_offsets.view(-1)[-1].item())
+    logid = batch.get("logid")
+    if torch.is_tensor(logid):
+        return int(logid.numel())
+    return 0
 
 
 def _fuse_user_offsets(batches):
@@ -790,6 +817,7 @@ def _fuse_inference_batches(batches):
     if len(batches) == 1:
         ensure_attention_tile_meta(batches[0])
         ensure_pred_positions(batches[0])
+        batches[0]["_aggregate_size"] = 1
         return batches[0]
 
     user_offsets = _fuse_user_offsets(batches)
@@ -816,20 +844,33 @@ def _aggregate_caller_all_batches():
     all_batches = _find_caller_all_batches()
     if not _looks_like_inference_batches(all_batches):
         return False
+    if not isinstance(all_batches, list):
+        return False
     if any(
         isinstance(batch, dict)
-        and (batch.get("_aggregate_skip", False) or "_aggregate_size" in batch)
+        and "_aggregate_size" in batch
         for batch in all_batches
     ):
         return False
 
     original = list(all_batches)
-    for start in range(0, len(original), JUDGE_BATCH_AGGREGATION_SIZE):
-        group = original[start:start + JUDGE_BATCH_AGGREGATION_SIZE]
-        fused = _fuse_inference_batches(group)
-        all_batches[start] = fused
-        for idx in range(start + 1, min(start + JUDGE_BATCH_AGGREGATION_SIZE, len(original))):
-            all_batches[idx] = _make_empty_skip_batch_like(original[idx])
+    fused_batches = []
+    group = []
+    group_tokens = 0
+    for batch in original:
+        n_tokens = _batch_n_tokens(batch)
+        if group and (
+            len(group) >= JUDGE_BATCH_AGGREGATION_SIZE
+            or group_tokens + n_tokens > JUDGE_BATCH_AGGREGATION_MAX_TOKENS
+        ):
+            fused_batches.append(_fuse_inference_batches(group))
+            group = []
+            group_tokens = 0
+        group.append(batch)
+        group_tokens += n_tokens
+    if group:
+        fused_batches.append(_fuse_inference_batches(group))
+    all_batches[:] = fused_batches
     return True
 
 
@@ -907,6 +948,13 @@ def move_batch_to_device(batch, device):
 
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
+        prepare_fixed_loop_pred_only_output(batch)
+        if batch.get("_no_pred_skip", False):
+            return {
+                "_no_pred_skip": True,
+                "logid": move_batch_to_device(batch["logid"], device),
+                "pred_mask": move_batch_to_device(batch["pred_mask"], device),
+            }
         return {k: move_batch_to_device(v, device) for k, v in batch.items()}
     elif isinstance(batch, tuple):
         return tuple(move_batch_to_device(x, device) for x in batch)
@@ -923,6 +971,13 @@ def move_batch_to_device_eager_only(batch, device):
     if isinstance(batch, dict):
         ensure_attention_tile_meta(batch)
         ensure_pred_positions(batch)
+        prepare_fixed_loop_pred_only_output(batch)
+        if batch.get("_no_pred_skip", False):
+            return {
+                "_no_pred_skip": True,
+                "logid": move_batch_to_device_eager_only(batch["logid"], device),
+                "pred_mask": move_batch_to_device_eager_only(batch["pred_mask"], device),
+            }
         return {k: move_batch_to_device_eager_only(v, device) for k, v in batch.items()}
     if isinstance(batch, tuple):
         return tuple(move_batch_to_device_eager_only(x, device) for x in batch)
@@ -2172,7 +2227,7 @@ class CTRModel(nn.Module):
         return encoder_output, moe_loss
 
     def forward(self, batch):
-        if isinstance(batch, dict) and batch.get("_aggregate_skip", False):
+        if isinstance(batch, dict) and batch.get("_no_pred_skip", False):
             logits = torch.empty(
                 (0, 1),
                 device=self.linear.weight.device,
@@ -2190,6 +2245,9 @@ class CTRModel(nn.Module):
 
     def _forward_eager(self, batch):
         encoder_output, moe_loss = self.encode(batch)
+        if isinstance(batch, dict) and batch.get("_gather_pred_only", False):
+            pred_positions = batch["pred_positions"].view(-1).to(device=encoder_output.device, dtype=torch.long)
+            encoder_output = encoder_output.index_select(0, pred_positions)
         if (
             self.linear.weight.is_cuda
             and self.linear.weight.dtype == torch.float16
