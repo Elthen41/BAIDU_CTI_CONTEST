@@ -297,6 +297,36 @@ __global__ void smoe_route_count_kernel(
     }
 }
 
+template <typename IndexT>
+__global__ void smoe_route_count_block_hist_kernel(
+    const IndexT* __restrict__ topk_idx,
+    int32_t* __restrict__ counts,
+    int64_t n_tokens
+) {
+    __shared__ int32_t block_counts[kNumExperts];
+    if (threadIdx.x < kNumExperts) {
+        block_counts[threadIdx.x] = 0;
+    }
+    __syncthreads();
+
+    const int64_t route_id = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const int64_t total_routes = n_tokens * kTopK;
+    if (route_id < total_routes) {
+        const int expert = static_cast<int>(topk_idx[route_id]);
+        if (expert >= 0 && expert < kNumExperts) {
+            atomicAdd(block_counts + expert, 1);
+        }
+    }
+    __syncthreads();
+
+    if (threadIdx.x < kNumExperts) {
+        const int32_t count = block_counts[threadIdx.x];
+        if (count != 0) {
+            atomicAdd(counts + threadIdx.x, count);
+        }
+    }
+}
+
 __global__ void smoe_route_prefix_kernel(
     const int32_t* __restrict__ counts,
     int32_t* __restrict__ offsets,
@@ -316,6 +346,45 @@ __global__ void smoe_route_prefix_kernel(
         running += padded;
     }
     offsets[kNumExperts] = running;
+}
+
+template <typename IndexT>
+__global__ void smoe_route_pack_light_kernel(
+    const c10::Half* __restrict__ x,
+    const IndexT* __restrict__ topk_idx,
+    int32_t* __restrict__ cursors,
+    c10::Half* __restrict__ x_route,
+    int32_t* __restrict__ route_pos,
+    int64_t n_tokens
+) {
+    const int64_t route_id = blockIdx.x;
+    const int token = static_cast<int>(route_id >> 1);
+    const int slot = static_cast<int>(route_id & 1);
+    if (route_id >= n_tokens * kTopK) {
+        return;
+    }
+
+    const int expert = static_cast<int>(topk_idx[route_id]);
+    if (expert < 0 || expert >= kNumExperts) {
+        return;
+    }
+
+    __shared__ int32_t shared_pos;
+    if (threadIdx.x == 0) {
+        shared_pos = atomicAdd(cursors + expert, 1);
+        route_pos[token * kTopK + slot] = shared_pos;
+    }
+    __syncthreads();
+    const int32_t pos = shared_pos;
+
+    const uint4* __restrict__ x_vec =
+        reinterpret_cast<const uint4*>(x + static_cast<int64_t>(token) * kHiddenDim);
+    uint4* __restrict__ route_vec =
+        reinterpret_cast<uint4*>(x_route + static_cast<int64_t>(pos) * kHiddenDim);
+    constexpr int kVecsPerRow = kHiddenDim / 8;
+    for (int vec = threadIdx.x; vec < kVecsPerRow; vec += blockDim.x) {
+        route_vec[vec] = x_vec[vec];
+    }
 }
 
 template <typename IndexT, typename ScoreT>
@@ -2075,7 +2144,7 @@ void launch_route_count(
 
     constexpr int kCountThreads = 256;
     const int blocks = static_cast<int>(ceil_div_int64(total_routes, kCountThreads));
-    smoe_route_count_kernel<IndexT>
+    smoe_route_count_block_hist_kernel<IndexT>
         <<<blocks, kCountThreads, 0, at::cuda::getCurrentCUDAStream()>>>(
             topk_idx.data_ptr<IndexT>(),
             counts.data_ptr<int32_t>(),
@@ -2113,6 +2182,32 @@ void launch_route_pack(
             route_token.data_ptr<int32_t>(),
             route_slot.data_ptr<int32_t>(),
             route_score.data_ptr<ScoreT>(),
+            n_tokens
+        );
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+template <typename IndexT>
+void launch_route_pack_light(
+    const torch::Tensor& x,
+    const torch::Tensor& topk_idx,
+    torch::Tensor& cursors,
+    torch::Tensor& x_route,
+    torch::Tensor& route_pos,
+    int64_t n_tokens
+) {
+    const int64_t total_routes = n_tokens * kTopK;
+    if (total_routes == 0) {
+        return;
+    }
+
+    smoe_route_pack_light_kernel<IndexT>
+        <<<static_cast<unsigned int>(total_routes), kThreads, 0, at::cuda::getCurrentCUDAStream()>>>(
+            x.data_ptr<c10::Half>(),
+            topk_idx.data_ptr<IndexT>(),
+            cursors.data_ptr<int32_t>(),
+            x_route.data_ptr<c10::Half>(),
+            route_pos.data_ptr<int32_t>(),
             n_tokens
         );
     C10_CUDA_KERNEL_LAUNCH_CHECK();
@@ -3492,7 +3587,8 @@ void validate_w4a16_debug_weight(
 RouteMetadata build_route_metadata(
     torch::Tensor x,
     torch::Tensor topk_idx,
-    torch::Tensor topk_score
+    torch::Tensor topk_score,
+    bool keep_aux_metadata = false
 ) {
     validate_route_inputs(x, topk_idx, topk_score);
 
@@ -3505,10 +3601,10 @@ RouteMetadata build_route_metadata(
     auto cursors = torch::empty({kNumExperts}, int_opts);
     auto offsets = torch::empty({kNumExperts + 1}, int_opts);
     auto route_pos = torch::empty({n_tokens, kTopK}, int_opts);
-    auto route_token = torch::empty({max_pool_routes}, int_opts);
-    auto route_slot = torch::empty({max_pool_routes}, int_opts);
+    auto route_token = keep_aux_metadata ? torch::empty({max_pool_routes}, int_opts) : torch::empty({0}, int_opts);
+    auto route_slot = keep_aux_metadata ? torch::empty({max_pool_routes}, int_opts) : torch::empty({0}, int_opts);
     auto x_route = torch::empty({max_pool_routes, kHiddenDim}, x.options());
-    auto route_score = torch::empty({max_pool_routes}, topk_score.options());
+    auto route_score = keep_aux_metadata ? torch::empty({max_pool_routes}, topk_score.options()) : torch::empty({0}, topk_score.options());
 
     auto stream = at::cuda::getCurrentCUDAStream();
     C10_CUDA_CHECK(cudaMemsetAsync(counts.data_ptr<int32_t>(), 0, counts.numel() * sizeof(int32_t), stream.stream()));
@@ -3532,22 +3628,32 @@ RouteMetadata build_route_metadata(
     );
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 
-    if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kHalf) {
-        launch_route_pack<int64_t, c10::Half>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
-    } else if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kFloat) {
-        launch_route_pack<int64_t, float>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
-    } else if (topk_idx.scalar_type() == at::kInt && topk_score.scalar_type() == at::kHalf) {
-        launch_route_pack<int32_t, c10::Half>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+    if (!keep_aux_metadata) {
+        if (topk_idx.scalar_type() == at::kLong) {
+            launch_route_pack_light<int64_t>(
+                x, topk_idx, cursors, x_route, route_pos, n_tokens);
+        } else {
+            launch_route_pack_light<int32_t>(
+                x, topk_idx, cursors, x_route, route_pos, n_tokens);
+        }
     } else {
-        launch_route_pack<int32_t, float>(
-            x, topk_idx, topk_score, cursors, x_route, route_pos,
-            route_token, route_slot, route_score, n_tokens);
+        if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kHalf) {
+            launch_route_pack<int64_t, c10::Half>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else if (topk_idx.scalar_type() == at::kLong && topk_score.scalar_type() == at::kFloat) {
+            launch_route_pack<int64_t, float>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else if (topk_idx.scalar_type() == at::kInt && topk_score.scalar_type() == at::kHalf) {
+            launch_route_pack<int32_t, c10::Half>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        } else {
+            launch_route_pack<int32_t, float>(
+                x, topk_idx, topk_score, cursors, x_route, route_pos,
+                route_token, route_slot, route_score, n_tokens);
+        }
     }
 
     return {x_route, route_pos, route_token, route_slot, route_score, counts, offsets, max_routes_per_expert};
@@ -3582,7 +3688,7 @@ std::vector<torch::Tensor> smoe_route_pack(
     torch::Tensor topk_idx,
     torch::Tensor topk_score
 ) {
-    auto meta = build_route_metadata(x, topk_idx, topk_score);
+    auto meta = build_route_metadata(x, topk_idx, topk_score, true);
     return {
         meta.x_route,
         meta.route_pos,
