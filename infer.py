@@ -44,6 +44,7 @@ USE_REP_LAYERNORM_14336_VEC8 = os.environ.get("USE_REP_LAYERNORM_14336_VEC8", "1
 USE_CUSTOM_CUDA_ATTENTION = os.environ.get("USE_CUSTOM_CUDA_ATTENTION", "1") != "0"
 USE_INTERLEAVED_QKV_ATTENTION = os.environ.get("USE_INTERLEAVED_QKV_ATTENTION", "1") != "0"
 USE_INTERLEAVED_QKV_ATTENTION_TOKEN_MAJOR_OUT = os.environ.get("USE_INTERLEAVED_QKV_ATTENTION_TOKEN_MAJOR_OUT", "1") != "0"
+USE_DENSE_ALL_SMOE = os.environ.get("USE_DENSE_ALL_SMOE", "0") != "0"
 USE_M64_SMOE = os.environ.get("USE_M64_SMOE", "0") != "0"
 USE_CUTLASS_SMOE = os.environ.get("USE_CUTLASS_SMOE", "0") != "0"
 USE_SIMPLE_W4A4_SMOE = os.environ.get("USE_SIMPLE_W4A4_SMOE", "1") != "0"
@@ -105,6 +106,7 @@ _ATTENTION_EXT = None
 _ATTENTION_KERNEL = None
 _INTERLEAVED_ATTENTION_KERNEL = None
 _ROUTED_SMOE_EXT = None
+_DENSE_ALL_SMOE_EXT = None
 _EMBEDDING_BAG_EXT = None
 _GATE_TOPK_EXT = None
 _OUTPUT_EXT = None
@@ -413,6 +415,15 @@ def _get_routed_smoe_ext():
 
     _ROUTED_SMOE_EXT = _load_prebuilt_cuda_ext("routed_smoe_ext")
     return _ROUTED_SMOE_EXT
+
+
+def _get_dense_all_smoe_ext():
+    global _DENSE_ALL_SMOE_EXT
+    if _DENSE_ALL_SMOE_EXT is not None:
+        return _DENSE_ALL_SMOE_EXT
+
+    _DENSE_ALL_SMOE_EXT = _load_prebuilt_cuda_ext("dense_all_smoe_ext")
+    return _DENSE_ALL_SMOE_EXT
 
 
 def _get_embedding_bag_ext():
@@ -1701,6 +1712,28 @@ class SMoE(nn.Module):
         )
         return out.reshape(B, S, D)
 
+    def _forward_dense_all_cuda(self, x, topk_idx, topk_score):
+        B, S, D = x.shape
+        x_flat = x.reshape(-1, D).contiguous()
+        n_tokens = x_flat.shape[0]
+
+        ext = _get_dense_all_smoe_ext()
+        if not hasattr(ext, "dense_all_smoe_forward"):
+            raise RuntimeError("dense_all_smoe_ext must export dense_all_smoe_forward")
+        out = ext.dense_all_smoe_forward(
+            x_flat,
+            self._dense_all_w1_tn.contiguous(),
+            self._dense_all_b1.contiguous(),
+            self._dense_all_w2_tn.contiguous(),
+            self._dense_all_b2.contiguous(),
+            topk_idx.reshape(n_tokens, self.k).contiguous(),
+            topk_score.reshape(n_tokens, self.k).contiguous(),
+        )
+        return out.reshape(B, S, D)
+
+    def _forward_dense_all_cuda_with_residual(self, x, residual, topk_idx, topk_score):
+        return residual + self._forward_dense_all_cuda(x, topk_idx, topk_score)
+
     def _forward_simple_w4a4_cuda(self, x, topk_idx, topk_score):
         self.prepare_simple_w4a4_weights()
 
@@ -1954,7 +1987,9 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
-        if USE_SIMPLE_W4A4_SMOE:
+        if USE_DENSE_ALL_SMOE:
+            out = self._forward_dense_all_cuda(x, topk_idx, topk_score)
+        elif USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe"):
                 pass
@@ -2004,6 +2039,10 @@ class SMoE(nn.Module):
             raise RuntimeError("SMoE requires custom CUDA routed sparse residual path with CUDA fp16 [*,512] input")
 
         topk_idx, topk_score, _ = self.gate(x)
+        if USE_DENSE_ALL_SMOE:
+            out = self._forward_dense_all_cuda_with_residual(x, residual, topk_idx, topk_score)
+            return out, x.new_zeros(())
+
         if USE_SIMPLE_W4A4_SMOE:
             self.prepare_simple_w4a4_weights()
             if not hasattr(self, "_printed_simple_w4a4_smoe_residual"):
@@ -2444,7 +2483,7 @@ def _warmup_custom_output(model, device, dtype=torch.float16):
 
 
 def _warmup_custom_routed_smoe(model, device, dtype=torch.float16):
-    if USE_SIMPLE_W4A4_SMOE or USE_W4A16_SMOE:
+    if USE_DENSE_ALL_SMOE or USE_SIMPLE_W4A4_SMOE or USE_W4A16_SMOE:
         return
 
     dev = torch.device(device)
@@ -2504,8 +2543,48 @@ def _warmup_custom_routed_smoe(model, device, dtype=torch.float16):
     torch.cuda.synchronize(dev)
 
 
+def _warmup_custom_dense_all_smoe(model, device, dtype=torch.float16):
+    if not USE_DENSE_ALL_SMOE:
+        return
+
+    dev = torch.device(device)
+    if dev.type != "cuda" or dtype != torch.float16:
+        return
+
+    moe = model.seq_encoder.moe[0]
+    if not (
+        hasattr(moe, "_dense_all_w1_tn")
+        and hasattr(moe, "_dense_all_b1")
+        and hasattr(moe, "_dense_all_w2_tn")
+        and hasattr(moe, "_dense_all_b2")
+    ):
+        return
+
+    ext = _get_dense_all_smoe_ext()
+    if not hasattr(ext, "dense_all_smoe_forward"):
+        raise RuntimeError("dense_all_smoe_ext must export dense_all_smoe_forward")
+
+    with torch.no_grad():
+        n_tokens = 128
+        x = torch.randn((n_tokens, 512), device=dev, dtype=dtype)
+        topk_idx = torch.empty((n_tokens, 2), device=dev, dtype=torch.long)
+        topk_idx[:, 0] = 0
+        topk_idx[:, 1] = 1
+        topk_score = torch.full((n_tokens, 2), 0.5, device=dev, dtype=dtype)
+        ext.dense_all_smoe_forward(
+            x,
+            moe._dense_all_w1_tn.contiguous(),
+            moe._dense_all_b1.contiguous(),
+            moe._dense_all_w2_tn.contiguous(),
+            moe._dense_all_b2.contiguous(),
+            topk_idx,
+            topk_score,
+        )
+    torch.cuda.synchronize(dev)
+
+
 def _warmup_custom_simple_w4a4_smoe(model, device, dtype=torch.float16):
-    if not USE_SIMPLE_W4A4_SMOE:
+    if USE_DENSE_ALL_SMOE or not USE_SIMPLE_W4A4_SMOE:
         return
 
     dev = torch.device(device)
@@ -3134,7 +3213,9 @@ def load_model(ckpt_path=None, device='cuda:0'):
     pass
     model.seq_encoder.prepare_dense_all_smoe()
     pass
-    if USE_SIMPLE_W4A4_SMOE:
+    if USE_DENSE_ALL_SMOE:
+        pass
+    elif USE_SIMPLE_W4A4_SMOE:
         model.seq_encoder.prepare_simple_w4a4_smoe()
         pass
     elif USE_W4A16_SMOE:
@@ -3148,6 +3229,7 @@ def load_model(ckpt_path=None, device='cuda:0'):
     _warmup_custom_layernorm(dev, dtype=model_dtype)
     _warmup_custom_attention(dev, dtype=model_dtype)
     _warmup_custom_routed_smoe(model, dev, dtype=model_dtype)
+    _warmup_custom_dense_all_smoe(model, dev, dtype=model_dtype)
     _warmup_custom_simple_w4a4_smoe(model, dev, dtype=model_dtype)
     _warmup_custom_w4a16_smoe(dev, dtype=model_dtype)
     _check_w4a16_smoe_weights(model)
